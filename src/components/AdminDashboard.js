@@ -1,5 +1,5 @@
 // src/components/AdminDashboard.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -20,6 +20,10 @@ import {
   Button,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+
+// Firebase Firestore imports for User Role Management
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 // Updated sample data with new classes
 const sampleData = [
@@ -108,25 +112,26 @@ const calculateClassAttendanceSummary = (classData) => {
   const totalMembers = members.length;
   const totalLessons = members[0] ? members[0].attendance.length : 0;
   let totalAttendances = 0;
-  members.forEach(member => {
-    totalAttendances += member.attendance.filter(x => x).length;
+  members.forEach((member) => {
+    totalAttendances += member.attendance.filter((x) => x).length;
   });
   const possibleAttendances = totalMembers * totalLessons;
-  const attendanceRate = possibleAttendances > 0
-    ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
-    : 'N/A';
+  const attendanceRate =
+    possibleAttendances > 0
+      ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
+      : 'N/A';
   return { totalMembers, totalLessons, totalAttendances, attendanceRate };
 };
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
-  // Filter states for class type and dates
+  // Existing filter states for classes
   const [filterClassType, setFilterClassType] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const filteredData = sampleData.filter(cls => {
+  const filteredData = sampleData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
   });
@@ -134,15 +139,54 @@ const AdminDashboard = () => {
   let aggregatedMembers = 0;
   let aggregatedAttendances = 0;
   let aggregatedPossible = 0;
-  filteredData.forEach(cls => {
-    const { totalMembers, totalLessons, totalAttendances } = calculateClassAttendanceSummary(cls);
+  filteredData.forEach((cls) => {
+    const { totalMembers, totalLessons, totalAttendances } =
+      calculateClassAttendanceSummary(cls);
     aggregatedMembers += totalMembers;
     aggregatedAttendances += totalAttendances;
     aggregatedPossible += totalMembers * totalLessons;
   });
-  const overallAttendanceRate = aggregatedPossible > 0
-    ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
-    : 'N/A';
+  const overallAttendanceRate =
+    aggregatedPossible > 0
+      ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
+      : 'N/A';
+
+  // New state for User Role Management.
+  const [users, setUsers] = useState([]);
+
+  // Fetch users from Firestore on component mount.
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const usersCollection = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollection);
+        const usersList = usersSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setUsers(usersList);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  // Handle role change updates.
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      await updateDoc(userDocRef, { role: newRole });
+      // Update local state to reflect role change.
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.id === userId ? { ...user, role: newRole } : user
+        )
+      );
+    } catch (error) {
+      console.error('Error updating role:', error);
+    }
+  };
 
   return (
     <div style={{ padding: '20px' }}>
@@ -150,7 +194,7 @@ const AdminDashboard = () => {
         Admin Dashboard
       </Typography>
 
-      {/* Filters Section */}
+      {/* Filters Section for Classes */}
       <Grid container spacing={2} style={{ marginBottom: '20px' }}>
         <Grid item xs={12} md={3}>
           <FormControl fullWidth>
@@ -193,7 +237,7 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Overview Cards */}
+      {/* Overview Cards for Classes */}
       <Grid container spacing={3} style={{ marginBottom: '20px' }}>
         <Grid item xs={12} sm={4}>
           <Card>
@@ -258,6 +302,44 @@ const AdminDashboard = () => {
                 </TableRow>
               );
             })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* ------------------- */}
+      {/* User Role Management */}
+      {/* ------------------- */}
+      <Typography variant="h5" gutterBottom style={{ marginTop: '40px' }}>
+        User Role Management
+      </Typography>
+      <TableContainer component={Paper} style={{ marginBottom: '40px' }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Email</TableCell>
+              <TableCell>Current Role</TableCell>
+              <TableCell>Change Role</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>{user.role}</TableCell>
+                <TableCell>
+                  <FormControl fullWidth>
+                    <Select
+                      value={user.role}
+                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                    >
+                      <MenuItem value="student">Student</MenuItem>
+                      <MenuItem value="teacher">Teacher</MenuItem>
+                      <MenuItem value="admin">Admin</MenuItem>
+                    </Select>
+                  </FormControl>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>
