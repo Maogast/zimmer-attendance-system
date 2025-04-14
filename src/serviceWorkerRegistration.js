@@ -14,6 +14,7 @@ const isLocalhost = Boolean(
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
       const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
       if (publicUrl.origin !== window.location.origin) {
+        // Our service worker won't work if PUBLIC_URL is on a different origin
         return;
       }
   
@@ -21,10 +22,10 @@ const isLocalhost = Boolean(
         const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
   
         if (isLocalhost) {
-          // This is running on localhost. Let's check if a service worker still exists or not.
+          // Check if a service worker still exists or not.
           checkValidServiceWorker(swUrl, config);
         } else {
-          // Is not localhost. Just register service worker.
+          // Not localhost. Register service worker.
           registerValidSW(swUrl, config);
         }
       });
@@ -43,12 +44,12 @@ const isLocalhost = Boolean(
           installingWorker.onstatechange = () => {
             if (installingWorker.state === 'installed') {
               if (navigator.serviceWorker.controller) {
-                // Updated content is available; please refresh.
+                // New content available; please refresh.
                 if (config && config.onUpdate) {
                   config.onUpdate(registration);
                 }
               } else {
-                // Content is cached for offline use.
+                // Content cached for offline use.
                 if (config && config.onSuccess) {
                   config.onSuccess(registration);
                 }
@@ -63,6 +64,7 @@ const isLocalhost = Boolean(
   }
   
   function checkValidServiceWorker(swUrl, config) {
+    // Check if the service worker can be found. If it can’t reload the page.
     fetch(swUrl, {
       headers: { 'Service-Worker': 'script' },
     })
@@ -88,8 +90,10 @@ const isLocalhost = Boolean(
   
   export function unregister() {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(registration => {
-        registration.unregister();
-      });
+      navigator.serviceWorker.ready
+        .then(registration => {
+          registration.unregister();
+        })
+        .catch(error => console.error(error));
     }
   }
