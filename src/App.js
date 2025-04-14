@@ -10,9 +10,8 @@ import AttendanceTracker from './components/AttendanceTracker';
 import AdminDashboard from './components/AdminDashboard';
 import TeacherView from './components/TeacherView';
 
-// New components for authentication and protection
-import Login from './components/Login';
-import SignUp from './components/SignUp';
+// New unified authentication component and related routes
+import AuthForm from './components/AuthForm';
 import Unauthorized from './components/Unauthorized';
 import PrivateRoute from './components/PrivateRoute';
 
@@ -60,8 +59,7 @@ function App() {
         {/* Application Routes */}
         <Routes>
           {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<SignUp />} />
+          <Route path="/auth" element={<AuthForm />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
           {/* Protected Routes - requires authentication */}
