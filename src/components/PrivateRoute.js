@@ -8,7 +8,7 @@ export default function PrivateRoute({ requiredRole }) {
 
   if (!currentUser) {
     // Not logged in – redirect to the login page.
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
   if (requiredRole && userRole !== requiredRole) {
