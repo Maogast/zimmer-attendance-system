@@ -1,12 +1,15 @@
 // src/firebaseHelpers.js
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase';
 
-export const updateClassMembers = async (classId, updatedMembers) => {
+// Adds a new member to a class document's "members" array.
+export const addMemberToClass = async (classId, newMember) => {
   try {
     const classRef = doc(db, 'classes', classId);
-    await updateDoc(classRef, { members: updatedMembers });
+    // Use arrayUnion to add newMember to the members array.
+    await updateDoc(classRef, { members: arrayUnion(newMember) });
+    console.log('Member added successfully!');
   } catch (error) {
-    console.error('Error updating members:', error);
+    console.error('Error adding member:', error);
   }
 };
