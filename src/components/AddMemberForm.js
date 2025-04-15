@@ -1,4 +1,5 @@
 // src/components/AddMemberForm.js
+import { addMemberToClass } from '../firebaseHelpers';
 import React, { useState } from 'react';
 import {
   Box,
