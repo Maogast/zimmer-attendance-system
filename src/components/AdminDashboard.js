@@ -1,4 +1,3 @@
-import { updateClassMembers } from '../firebaseHelpers';
 // src/components/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
 import {
@@ -17,12 +16,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  TextField,
   Button,
+  Modal,
+  TextField,
+  Box,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { addMemberToClass, addNewClass } from '../firebaseHelpers';
 
 // Utility function to calculate attendance metrics for a given class.
 const calculateClassAttendanceSummary = (classData) => {
@@ -44,63 +46,42 @@ const calculateClassAttendanceSummary = (classData) => {
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [filterClassType, setFilterClassType] = useState('All');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [classesData, setClassesData] = useState([]);
-  const [users, setUsers] = useState([]);
 
-  // Fetch classes from Firestore on mount
-  useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        const classesCollection = collection(db, 'classes');
-        const classesSnapshot = await getDocs(classesCollection);
-        const classesList = classesSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setClassesData(classesList);
-      } catch (error) {
-        console.error('Error fetching classes:', error);
-      }
-    };
-    fetchClasses();
-  }, []);
+  // State for "Add Member" modal is still here for existing classes.
+  const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
+  const [selectedClassId, setSelectedClassId] = useState(null);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [modalError, setModalError] = useState('');
 
-  // Fetch users from Firestore on mount
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersCollection = collection(db, 'users');
-        const usersSnapshot = await getDocs(usersCollection);
-        const usersList = usersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setUsers(usersList);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      }
-    };
-    fetchUsers();
-  }, []);
+  // STATE for "Add New Class" modal
+  const [openAddClassModal, setOpenAddClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassTeacher, setNewClassTeacher] = useState('');
+  const [newClassElder, setNewClassElder] = useState('');
+  const [classModalError, setClassModalError] = useState('');
 
-  // Handle changes to a user's role
-  const handleRoleChange = async (userId, newRole) => {
+  // Function to fetch classes from Firestore.
+  const fetchClasses = async () => {
     try {
-      const userDocRef = doc(db, 'users', userId);
-      await updateDoc(userDocRef, { role: newRole });
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user.id === userId ? { ...user, role: newRole } : user
-        )
-      );
+      const classesCollection = collection(db, 'classes');
+      const classesSnapshot = await getDocs(classesCollection);
+      const classesList = classesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setClassesData(classesList);
     } catch (error) {
-      console.error('Error updating role:', error);
+      console.error('Error fetching classes:', error);
     }
   };
 
-  // Filter classes based on selected class type (additional date filters can be applied later)
+  // Fetch classes on component mount.
+  useEffect(() => {
+    fetchClasses();
+  }, []);
+
+  // Filter classes based on the selected class type.
   const filteredData = classesData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
@@ -121,13 +102,92 @@ const AdminDashboard = () => {
       ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
       : 'N/A';
 
+  // --------------------------
+  // Functions for "Add Member" modal (for existing classes)
+  const handleOpenAddMemberModal = (classId) => {
+    setSelectedClassId(classId);
+    setOpenAddMemberModal(true);
+  };
+
+  const handleCloseAddMemberModal = () => {
+    setOpenAddMemberModal(false);
+    setSelectedClassId(null);
+    setNewMemberName('');
+    setModalError('');
+  };
+
+  const handleAddMember = async () => {
+    if (!newMemberName.trim()) {
+      setModalError('Please enter a member name');
+      return;
+    }
+    try {
+      const newMember = {
+        fullName: newMemberName.trim(),
+        attendance: [],
+      };
+      await addMemberToClass(selectedClassId, newMember);
+      await fetchClasses();
+      handleCloseAddMemberModal();
+    } catch (error) {
+      setModalError('Error adding member, please try again.');
+      console.error(error);
+    }
+  };
+
+  // --------------------------
+  // Functions for "Add New Class" modal
+  const handleOpenAddClassModal = () => {
+    setOpenAddClassModal(true);
+  };
+
+  const handleCloseAddClassModal = () => {
+    setOpenAddClassModal(false);
+    setNewClassName('');
+    setNewClassTeacher('');
+    setNewClassElder('');
+    setClassModalError('');
+  };
+
+  const handleCreateClass = async () => {
+    if (!newClassName.trim() || !newClassTeacher.trim()) {
+      setClassModalError('Please enter a class name and teacher');
+      return;
+    }
+    const newClassData = {
+      name: newClassName.trim(),
+      teacher: newClassTeacher.trim(),
+      elder: newClassElder.trim() || '', // optional
+      classType: 'Church Service', // fixed value; change as needed
+      members: [],
+    };
+    try {
+      await addNewClass(newClassData);
+      await fetchClasses();
+      handleCloseAddClassModal();
+    } catch (error) {
+      setClassModalError('Error creating class, please try again.');
+      console.error(error);
+    }
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <Typography variant="h4" gutterBottom>
         Admin Dashboard
       </Typography>
 
-      {/* Filters Section */}
+      {/* Add New Class Button */}
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleOpenAddClassModal}
+        sx={{ mb: 2 }}
+      >
+        Add New Class
+      </Button>
+
+      {/* Filter Section */}
       <Grid container spacing={2} style={{ marginBottom: '20px' }}>
         <Grid item xs={12} md={3}>
           <FormControl fullWidth>
@@ -142,31 +202,6 @@ const AdminDashboard = () => {
               {/* Add additional class types if needed */}
             </Select>
           </FormControl>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <TextField
-            label="Start Date"
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <TextField
-            label="End Date"
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Button variant="contained" fullWidth>
-            Apply Filters
-          </Button>
         </Grid>
       </Grid>
 
@@ -212,6 +247,7 @@ const AdminDashboard = () => {
               <TableCell>Total Lessons</TableCell>
               <TableCell>Total Attendances</TableCell>
               <TableCell>Attendance Rate (%)</TableCell>
+              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -231,11 +267,24 @@ const AdminDashboard = () => {
                   <TableCell>{cls.classType}</TableCell>
                   <TableCell>{totalMembers}</TableCell>
                   <TableCell>
-                    {cls.members ? cls.members.map(member => member.fullName).join(', ') : 'No members'}
+                    {cls.members
+                      ? cls.members.map((member) => member.fullName).join(', ')
+                      : 'No members'}
                   </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
                   <TableCell>{attendanceRate}%</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outlined"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAddMemberModal(cls.id);
+                      }}
+                    >
+                      Add Member
+                    </Button>
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -243,41 +292,111 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* User Role Management Section */}
-      <Typography variant="h5" gutterBottom style={{ marginTop: '40px' }}>
-        User Role Management
-      </Typography>
-      <TableContainer component={Paper} style={{ marginBottom: '40px' }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Email</TableCell>
-              <TableCell>Current Role</TableCell>
-              <TableCell>Change Role</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.role}</TableCell>
-                <TableCell>
-                  <FormControl fullWidth>
-                    <Select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    >
-                      <MenuItem value="student">Student</MenuItem>
-                      <MenuItem value="teacher">Teacher</MenuItem>
-                      <MenuItem value="admin">Admin</MenuItem>
-                    </Select>
-                  </FormControl>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Modal for Adding a New Member */}
+      <Modal
+        open={openAddMemberModal}
+        onClose={handleCloseAddMemberModal}
+        aria-labelledby="add-member-modal-title"
+        aria-describedby="add-member-modal-description"
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 350,
+            bgcolor: 'background.paper',
+            border: '2px solid #000',
+            boxShadow: 24,
+            p: 4,
+          }}
+        >
+          <Typography id="add-member-modal-title" variant="h6" component="h2">
+            Add New Member
+          </Typography>
+          <TextField
+            label="Member Name"
+            value={newMemberName}
+            onChange={(e) => setNewMemberName(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          {modalError && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {modalError}
+            </Typography>
+          )}
+          <Button
+            variant="contained"
+            onClick={handleAddMember}
+            sx={{ mt: 2 }}
+            fullWidth
+          >
+            Submit
+          </Button>
+        </Box>
+      </Modal>
+
+      {/* Modal for Adding a New Class */}
+      <Modal
+        open={openAddClassModal}
+        onClose={handleCloseAddClassModal}
+        aria-labelledby="add-class-modal-title"
+        aria-describedby="add-class-modal-description"
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 400,
+            bgcolor: 'background.paper',
+            border: '2px solid #000',
+            boxShadow: 24,
+            p: 4,
+          }}
+        >
+          <Typography id="add-class-modal-title" variant="h6" component="h2">
+            Add New Class
+          </Typography>
+          <TextField
+            label="Class Name"
+            value={newClassName}
+            onChange={(e) => setNewClassName(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Teacher"
+            value={newClassTeacher}
+            onChange={(e) => setNewClassTeacher(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Elder (Optional)"
+            value={newClassElder}
+            onChange={(e) => setNewClassElder(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          {classModalError && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {classModalError}
+            </Typography>
+          )}
+          <Button
+            variant="contained"
+            onClick={handleCreateClass}
+            sx={{ mt: 2 }}
+            fullWidth
+          >
+            Create Class
+          </Button>
+        </Box>
+      </Modal>
     </div>
   );
 };

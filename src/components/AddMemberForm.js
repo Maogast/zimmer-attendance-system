@@ -13,20 +13,24 @@ const AddMemberForm = ({ classId, onMemberAdded }) => {
       setError('Please enter a member name');
       return;
     }
+    
+    // Create the new member object.
     const newMember = {
       fullName: memberName.trim(),
-      // You can initialize the attendance array as empty, or add default values if needed.
+      // Initialize attendance as an empty array; teachers can later mark attendance.
       attendance: [],
     };
+
     try {
       await addMemberToClass(classId, newMember);
       setMemberName('');
       setError('');
+      // Call the onMemberAdded callback to refresh parent data if needed.
       if (onMemberAdded) {
-        onMemberAdded(); // callback to refresh the class data if needed.
+        onMemberAdded();
       }
     } catch (error) {
-      setError('Error adding member. Please try again.');
+      setError('Error adding member, please try again.');
       console.error(error);
     }
   };
