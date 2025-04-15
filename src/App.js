@@ -9,6 +9,7 @@ import ClassesDashboard from './components/ClassesDashboard';
 import AttendanceTracker from './components/AttendanceTracker';
 import AdminDashboard from './components/AdminDashboard';
 import TeacherView from './components/TeacherView';
+import AdminAttendanceView from './components/AdminAttendanceView'; // New import
 
 // New unified authentication component and related routes
 import AuthForm from './components/AuthForm';
@@ -61,20 +62,11 @@ function NavigationBar({ darkMode, toggleDarkMode }) {
         {/* Display Clock (date & time) */}
         <Clock />
         {/* Dark mode toggle */}
-        <IconButton
-          onClick={toggleDarkMode}
-          color="inherit"
-          aria-label="toggle dark mode"
-        >
+        <IconButton onClick={toggleDarkMode} color="inherit" aria-label="toggle dark mode">
           {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
         </IconButton>
         {/* Logout button */}
-        <IconButton
-          onClick={handleLogout}
-          color="inherit"
-          aria-label="logout"
-          sx={{ ml: 1 }}
-        >
+        <IconButton onClick={handleLogout} color="inherit" aria-label="logout" sx={{ ml: 1 }}>
           <LogoutIcon />
         </IconButton>
       </Toolbar>
@@ -102,10 +94,7 @@ function App() {
       <CssBaseline />
       <BrowserRouter>
         {/* Use our custom NavigationBar */}
-        <NavigationBar
-          darkMode={darkMode}
-          toggleDarkMode={() => setDarkMode(!darkMode)}
-        />
+        <NavigationBar darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)} />
 
         {/* Application Routes */}
         <Routes>
@@ -122,6 +111,8 @@ function App() {
             </Route>
             <Route element={<PrivateRoute requiredRole="admin" />}>
               <Route path="/admin" element={<AdminDashboard />} />
+              {/* New route for viewing attendance as Admin */}
+              <Route path="/admin/attendance/:classId" element={<AdminAttendanceView />} />
             </Route>
           </Route>
         </Routes>

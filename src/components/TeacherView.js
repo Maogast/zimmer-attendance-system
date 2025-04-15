@@ -4,8 +4,7 @@ import { Typography, Box, Button } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import AddMemberForm from './AddMemberForm';
-import MarkSaturdayAttendance from './TempAttendace';
+import MarkSaturdayAttendance from './MarkSaturdayAttendance';
 
 const TeacherView = () => {
   const { classId } = useParams();
@@ -13,34 +12,26 @@ const TeacherView = () => {
   const [loading, setLoading] = useState(true);
   const [showAttendanceForm, setShowAttendanceForm] = useState(false);
 
-  const fetchClassData = async () => {
-    try {
-      const classDocRef = doc(db, 'classes', classId);
-      const classDocSnap = await getDoc(classDocRef);
-      if (classDocSnap.exists()) {
-        setClassData({ id: classDocSnap.id, ...classDocSnap.data() });
-      } else {
-        console.error('No class found with the provided ID.');
-      }
-    } catch (error) {
-      console.error('Error fetching class data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Fetch the class data from Firestore
   useEffect(() => {
+    const fetchClassData = async () => {
+      try {
+        const classRef = doc(db, 'classes', classId);
+        const classSnap = await getDoc(classRef);
+        if (classSnap.exists()) {
+          setClassData({ id: classSnap.id, ...classSnap.data() });
+        } else {
+          console.error('No class found with the provided ID.');
+        }
+      } catch (error) {
+        console.error('Error fetching class data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchClassData();
   }, [classId]);
-
-  const handleMemberAdded = () => {
-    // Refresh class data to reflect any new members.
-    fetchClassData();
-  };
-
-  const toggleAttendanceForm = () => {
-    setShowAttendanceForm(!showAttendanceForm);
-  };
 
   if (loading) {
     return <Typography variant="h6">Loading class data...</Typography>;
@@ -49,25 +40,27 @@ const TeacherView = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
-        Teacher View - {classData?.name}
+        Teacher View - {classData.name}
       </Typography>
-      
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Members: {classData?.members ? classData.members.map(m => m.fullName).join(', ') : 'No members yet'}
-      </Typography>
-      
-      {/* Form to add a new member */}
-      <AddMemberForm classId={classData.id} onMemberAdded={handleMemberAdded} />
 
-      {/* Toggle button for attendance marking */}
-      <Button variant="contained" sx={{ mt: 3 }} onClick={toggleAttendanceForm}>
-        {showAttendanceForm ? 'Hide Attendance Form' : 'Mark Saturday Attendance'}
+      {/* Additional teacher-specific member management can go here */}
+
+      {/* Always allow teachers to mark attendance for their class */}
+      <Button
+        variant="contained"
+        sx={{ mt: 3 }}
+        onClick={() => setShowAttendanceForm(!showAttendanceForm)}
+      >
+        {showAttendanceForm ? 'Hide Attendance Form' : 'Mark Sabbath Attendance'}
       </Button>
 
       {showAttendanceForm && (
         <MarkSaturdayAttendance
           classData={classData}
-          onAttendanceMarked={fetchClassData}
+          onAttendanceMarked={() => {
+            // Optionally hide form or refresh class data once attendance is marked.
+            setShowAttendanceForm(false);
+          }}
         />
       )}
     </Box>

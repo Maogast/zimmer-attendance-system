@@ -25,13 +25,19 @@ import {
   FormControlLabel,
   Radio,
   Snackbar,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { addMemberToClass, addNewClass } from '../firebaseHelpers';
-// Import the attendance marking component
-import MarkSaturdayAttendance from './TempAttendace';
+import { addMemberToClass, addNewClass, deleteMemberFromClass, deleteClass } from '../firebaseHelpers';
+import MarkSaturdayAttendance from './MarkSaturdayAttendance';
 
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
@@ -80,6 +86,34 @@ const AdminDashboard = () => {
   // State for Attendance Modal (for marking register).
   const [openAttendanceModal, setOpenAttendanceModal] = useState(false);
   const [selectedAttendanceClass, setSelectedAttendanceClass] = useState(null);
+
+  // ---- Confirmation Dialog State ----
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: null,
+  });
+
+  const openConfirmDialog = (title, message, onConfirm) => {
+    setConfirmDialog({
+      open: true,
+      title,
+      message,
+      onConfirm,
+    });
+  };
+
+  const handleCloseDialog = () => {
+    setConfirmDialog({ ...confirmDialog, open: false });
+  };
+
+  const handleConfirm = () => {
+    if (confirmDialog.onConfirm) {
+      confirmDialog.onConfirm();
+    }
+    handleCloseDialog();
+  };
 
   // Fetch classes data from Firestore.
   const fetchClasses = async () => {
@@ -234,6 +268,41 @@ const AdminDashboard = () => {
     setSelectedAttendanceClass(null);
   };
 
+  // ---------- Delete Functions using Confirmation Dialog ----------
+  const handleDeleteMember = (classId, member) => {
+    openConfirmDialog(
+      'Delete Member',
+      `Are you sure you want to delete member "${member.fullName}"?`,
+      async () => {
+        try {
+          await deleteMemberFromClass(classId, member);
+          setSnackbarMessage('Member deleted successfully!');
+          setSnackbarOpen(true);
+          await fetchClasses();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    );
+  };
+
+  const handleDeleteClass = (classId, className) => {
+    openConfirmDialog(
+      'Delete Class',
+      `Are you sure you want to delete the class "${className}"?`,
+      async () => {
+        try {
+          await deleteClass(classId);
+          setSnackbarMessage('Class deleted successfully!');
+          setSnackbarOpen(true);
+          await fetchClasses();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    );
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <Typography variant="h4" gutterBottom>
@@ -329,9 +398,27 @@ const AdminDashboard = () => {
                   <TableCell>{cls.classType}</TableCell>
                   <TableCell>{totalMembers}</TableCell>
                   <TableCell>
-                    {cls.members
-                      ? cls.members.map((member) => member.fullName).join(', ')
-                      : 'No members'}
+                    {cls.members && cls.members.length > 0 ? (
+                      cls.members.map((member, index) => (
+                        <div
+                          key={index}
+                          style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}
+                        >
+                          <span>{member.fullName}</span>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMember(cls.id, member);
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </div>
+                      ))
+                    ) : (
+                      'No members'
+                    )}
                   </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
@@ -354,8 +441,19 @@ const AdminDashboard = () => {
                         e.stopPropagation();
                         handleOpenAttendanceModal(cls);
                       }}
+                      sx={{ mb: 1 }}
                     >
                       Mark Attendance
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClass(cls.id, cls.name);
+                      }}
+                    >
+                      Delete Class
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -550,6 +648,20 @@ const AdminDashboard = () => {
           )}
         </Box>
       </Modal>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onClose={handleCloseDialog}>
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{confirmDialog.message}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleConfirm} color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for Confirmation Messages */}
       <Snackbar
