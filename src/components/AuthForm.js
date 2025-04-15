@@ -1,14 +1,15 @@
 // src/components/AuthForm.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { 
   createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+  signInWithEmailAndPassword,
+  onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 const AuthForm = () => {
-  // Toggle between login and signup mode
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,27 +23,51 @@ const AuthForm = () => {
     "admin3@example.com"
   ];
 
+  const navigate = useNavigate();
+
+  // Listen for auth state changes so you can redirect if already logged in.
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if(user) {
+        // Fetch the role from Firestore.
+        const userDocRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userDocRef);
+        const userRole = userSnap.exists() ? userSnap.data().role : "student";
+        // Redirect based on the user role.
+        if(userRole === "admin") {
+          navigate("/admin");
+        } else if(userRole === "teacher") {
+          navigate("/teacher");
+        } else {
+          // For general users, redirect to the Classes Dashboard ("/")
+          navigate("/");
+        }
+      }
+    });
+    return unsubscribe;
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     if (isLogin) {
-      // Login flow
+      // Login flow:
       try {
         await signInWithEmailAndPassword(auth, email, password);
-        // Login successful; you may redirect the user or show a success message.
+        // The onAuthStateChanged effect above will handle the redirect.
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
       }
     } else {
-      // Sign-up flow
+      // Sign-up flow:
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        // Determine the role based on the admin email list (case-insensitive).
+        // Determine the role: if email is in adminEmails, assign "admin"; otherwise "student"
         const userRole = adminEmails.some(
           (adminEmail) => adminEmail.toLowerCase() === email.toLowerCase()
         ) ? "admin" : "student";
@@ -52,7 +77,7 @@ const AuthForm = () => {
           role: userRole,
           createdAt: serverTimestamp(),
         });
-        // Sign-up successful; you may redirect the user or display a welcome message.
+        // The onAuthStateChanged effect above will then handle the redirect.
       } catch (err) {
         setError(err.message);
       } finally {
@@ -91,18 +116,10 @@ const AuthForm = () => {
         </button>
       </form>
       <p style={{ marginTop: '10px' }}>
-        {isLogin
-          ? "New user? "
-          : "Already have an account? "}
+        {isLogin ? "New user? " : "Already have an account? "}
         <button 
           onClick={() => setIsLogin(!isLogin)}
-          style={{ 
-            background: 'none', 
-            border: 'none', 
-            color: 'blue', 
-            cursor: 'pointer',
-            padding: 0
-          }}
+          style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', padding: 0 }}
         >
           {isLogin ? "Switch to Sign Up" : "Switch to Login"}
         </button>
