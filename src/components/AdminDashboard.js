@@ -1,4 +1,5 @@
 // src/components/AdminDashboard.js
+import { addMemberToClass, addNewClass } from '../firebaseHelpers';
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -20,16 +21,21 @@ import {
   Modal,
   TextField,
   Box,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addMemberToClass, addNewClass } from '../firebaseHelpers';
 
-// Utility function to calculate attendance metrics for a given class.
+// Utility function to calculate attendance metrics for a class.
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
   const totalMembers = members?.length || 0;
+  // For demonstration, assume each member has an attendance array (could be session values) 
   const totalLessons = members?.[0]?.attendance?.length || 0;
   let totalAttendances = 0;
   members?.forEach((member) => {
@@ -48,20 +54,27 @@ const AdminDashboard = () => {
   const [filterClassType, setFilterClassType] = useState('All');
   const [classesData, setClassesData] = useState([]);
 
-  // State for "Add Member" modal is still here for existing classes.
+  // State for Add Member modal.
   const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
-  const [newMemberName, setNewMemberName] = useState('');
+  // New Member fields:
+  const [newMemberFullName, setNewMemberFullName] = useState('');
+  const [newMemberResidence, setNewMemberResidence] = useState('');
+  const [newMemberPrayerCell, setNewMemberPrayerCell] = useState('');
+  const [newMemberPhone, setNewMemberPhone] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberMembership, setNewMemberMembership] = useState('Member');
+  const [newMemberBaptized, setNewMemberBaptized] = useState('Not Baptized');
   const [modalError, setModalError] = useState('');
 
-  // STATE for "Add New Class" modal
+  // State for Add New Class modal.
   const [openAddClassModal, setOpenAddClassModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassTeacher, setNewClassTeacher] = useState('');
   const [newClassElder, setNewClassElder] = useState('');
   const [classModalError, setClassModalError] = useState('');
 
-  // Function to fetch classes from Firestore.
+  // Fetch all classes from Firestore.
   const fetchClasses = async () => {
     try {
       const classesCollection = collection(db, 'classes');
@@ -76,17 +89,17 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch classes on component mount.
   useEffect(() => {
     fetchClasses();
   }, []);
 
-  // Filter classes based on the selected class type.
+  // Filter classes by type (if needed)
   const filteredData = classesData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
   });
 
+  // Aggregate overview data.
   let aggregatedMembers = 0;
   let aggregatedAttendances = 0;
   let aggregatedPossible = 0;
@@ -102,8 +115,7 @@ const AdminDashboard = () => {
       ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
       : 'N/A';
 
-  // --------------------------
-  // Functions for "Add Member" modal (for existing classes)
+  // ---------- Add Member Modal Functions ----------
   const handleOpenAddMemberModal = (classId) => {
     setSelectedClassId(classId);
     setOpenAddMemberModal(true);
@@ -112,20 +124,40 @@ const AdminDashboard = () => {
   const handleCloseAddMemberModal = () => {
     setOpenAddMemberModal(false);
     setSelectedClassId(null);
-    setNewMemberName('');
+    // Reset all fields.
+    setNewMemberFullName('');
+    setNewMemberResidence('');
+    setNewMemberPrayerCell('');
+    setNewMemberPhone('');
+    setNewMemberEmail('');
+    setNewMemberMembership('Member');
+    setNewMemberBaptized('Not Baptized');
     setModalError('');
   };
 
   const handleAddMember = async () => {
-    if (!newMemberName.trim()) {
-      setModalError('Please enter a member name');
+    // Validate required fields.
+    if (
+      !newMemberFullName.trim() ||
+      !newMemberResidence.trim() ||
+      !newMemberPhone.trim() ||
+      !newMemberEmail.trim()
+    ) {
+      setModalError('Please fill out all required fields.');
       return;
     }
+    const newMember = {
+      fullName: newMemberFullName.trim(),
+      residence: newMemberResidence.trim(),
+      prayerCell: newMemberPrayerCell.trim(),
+      phone: newMemberPhone.trim(),
+      email: newMemberEmail.trim(),
+      membership: newMemberMembership,
+      baptized: newMemberBaptized,
+      attendance: [], // Initialize empty; attendance marked later.
+    };
+
     try {
-      const newMember = {
-        fullName: newMemberName.trim(),
-        attendance: [],
-      };
       await addMemberToClass(selectedClassId, newMember);
       await fetchClasses();
       handleCloseAddMemberModal();
@@ -135,8 +167,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // --------------------------
-  // Functions for "Add New Class" modal
+  // ---------- Add New Class Modal Functions ----------
   const handleOpenAddClassModal = () => {
     setOpenAddClassModal(true);
   };
@@ -157,8 +188,8 @@ const AdminDashboard = () => {
     const newClassData = {
       name: newClassName.trim(),
       teacher: newClassTeacher.trim(),
-      elder: newClassElder.trim() || '', // optional
-      classType: 'Church Service', // fixed value; change as needed
+      elder: newClassElder.trim() || '', // Optional
+      classType: 'Church Service', // Fixed value; update if needed.
       members: [],
     };
     try {
@@ -177,13 +208,8 @@ const AdminDashboard = () => {
         Admin Dashboard
       </Typography>
 
-      {/* Add New Class Button */}
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={handleOpenAddClassModal}
-        sx={{ mb: 2 }}
-      >
+      {/* Button to Add New Class */}
+      <Button variant="contained" color="primary" onClick={handleOpenAddClassModal} sx={{ mb: 2 }}>
         Add New Class
       </Button>
 
@@ -199,7 +225,6 @@ const AdminDashboard = () => {
             >
               <MenuItem value="All">All</MenuItem>
               <MenuItem value="Church Service">Church Service</MenuItem>
-              {/* Add additional class types if needed */}
             </Select>
           </FormControl>
         </Grid>
@@ -267,9 +292,7 @@ const AdminDashboard = () => {
                   <TableCell>{cls.classType}</TableCell>
                   <TableCell>{totalMembers}</TableCell>
                   <TableCell>
-                    {cls.members
-                      ? cls.members.map((member) => member.fullName).join(', ')
-                      : 'No members'}
+                    {cls.members ? cls.members.map((member) => member.fullName).join(', ') : 'No members'}
                   </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
@@ -305,7 +328,7 @@ const AdminDashboard = () => {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 350,
+            width: 400,
             bgcolor: 'background.paper',
             border: '2px solid #000',
             boxShadow: 24,
@@ -315,24 +338,88 @@ const AdminDashboard = () => {
           <Typography id="add-member-modal-title" variant="h6" component="h2">
             Add New Member
           </Typography>
+          {/* Full Name */}
           <TextField
-            label="Member Name"
-            value={newMemberName}
-            onChange={(e) => setNewMemberName(e.target.value)}
+            label="Full Name"
+            value={newMemberFullName}
+            onChange={(e) => setNewMemberFullName(e.target.value)}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+          />
+          {/* Residence */}
+          <TextField
+            label="Residence"
+            value={newMemberResidence}
+            onChange={(e) => setNewMemberResidence(e.target.value)}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+          />
+          {/* Prayer Cell */}
+          <TextField
+            label="Prayer Cell"
+            value={newMemberPrayerCell}
+            onChange={(e) => setNewMemberPrayerCell(e.target.value)}
             fullWidth
             sx={{ mt: 2 }}
           />
+          {/* Phone Number */}
+          <TextField
+            label="Phone Number"
+            value={newMemberPhone}
+            onChange={(e) => setNewMemberPhone(e.target.value)}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+          />
+          {/* Email Address */}
+          <TextField
+            label="Email Address"
+            value={newMemberEmail}
+            onChange={(e) => setNewMemberEmail(e.target.value)}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+          />
+          {/* Membership */}
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Membership</InputLabel>
+            <Select
+              value={newMemberMembership}
+              label="Membership"
+              onChange={(e) => setNewMemberMembership(e.target.value)}
+            >
+              <MenuItem value="Member">Member</MenuItem>
+              <MenuItem value="Visitor">Visitor</MenuItem>
+            </Select>
+          </FormControl>
+          {/* Baptized Status */}
+          <FormControl component="fieldset" sx={{ mt: 2 }}>
+            <FormLabel component="legend">Baptized</FormLabel>
+            <RadioGroup
+              row
+              value={newMemberBaptized}
+              onChange={(e) => setNewMemberBaptized(e.target.value)}
+            >
+              <FormControlLabel
+                value="Baptized"
+                control={<Radio />}
+                label="Baptized"
+              />
+              <FormControlLabel
+                value="Not Baptized"
+                control={<Radio />}
+                label="Not Baptized"
+              />
+            </RadioGroup>
+          </FormControl>
           {modalError && (
             <Typography color="error" sx={{ mt: 1 }}>
               {modalError}
             </Typography>
           )}
-          <Button
-            variant="contained"
-            onClick={handleAddMember}
-            sx={{ mt: 2 }}
-            fullWidth
-          >
+          <Button variant="contained" onClick={handleAddMember} sx={{ mt: 2 }} fullWidth>
             Submit
           </Button>
         </Box>
@@ -366,6 +453,7 @@ const AdminDashboard = () => {
             value={newClassName}
             onChange={(e) => setNewClassName(e.target.value)}
             fullWidth
+            required
             sx={{ mt: 2 }}
           />
           <TextField
@@ -373,6 +461,7 @@ const AdminDashboard = () => {
             value={newClassTeacher}
             onChange={(e) => setNewClassTeacher(e.target.value)}
             fullWidth
+            required
             sx={{ mt: 2 }}
           />
           <TextField
@@ -387,12 +476,7 @@ const AdminDashboard = () => {
               {classModalError}
             </Typography>
           )}
-          <Button
-            variant="contained"
-            onClick={handleCreateClass}
-            sx={{ mt: 2 }}
-            fullWidth
-          >
+          <Button variant="contained" onClick={handleCreateClass} sx={{ mt: 2 }} fullWidth>
             Create Class
           </Button>
         </Box>
