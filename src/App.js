@@ -9,9 +9,9 @@ import ClassesDashboard from './components/ClassesDashboard';
 import AttendanceTracker from './components/AttendanceTracker';
 import AdminDashboard from './components/AdminDashboard';
 import TeacherView from './components/TeacherView';
-import AdminAttendanceView from './components/AdminAttendanceView'; // New import
+import AdminAttendanceView from './components/AdminAttendanceView';
 
-// New unified authentication component and related routes
+// Authentication and Protected Routes
 import AuthForm from './components/AuthForm';
 import Unauthorized from './components/Unauthorized';
 import PrivateRoute from './components/PrivateRoute';
@@ -32,20 +32,12 @@ import { auth } from './firebase';
 // Import the Clock component
 import Clock from './components/Clock';
 
-/* NavigationBar Component:
-   This component renders the top AppBar including:
-   - Title
-   - Current date and time (using Clock component)
-   - Dark mode toggle button
-   - Logout button which signs out the user and redirects to '/auth'
-*/
 function NavigationBar({ darkMode, toggleDarkMode }) {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // Redirect to the authentication page after logging out
       navigate('/auth');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -59,7 +51,7 @@ function NavigationBar({ darkMode, toggleDarkMode }) {
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Church Attendance System
         </Typography>
-        {/* Display Clock (date & time) */}
+        {/* Display Clock */}
         <Clock />
         {/* Dark mode toggle */}
         <IconButton onClick={toggleDarkMode} color="inherit" aria-label="toggle dark mode">
@@ -75,44 +67,37 @@ function NavigationBar({ darkMode, toggleDarkMode }) {
 }
 
 function App() {
-  // State to handle dark mode toggle
   const [darkMode, setDarkMode] = useState(false);
 
-  // Create a Material UI theme using darkMode state
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: darkMode ? 'dark' : 'light',
-        },
-      }),
-    [darkMode]
-  );
+  const theme = useMemo(() => createTheme({ palette: { mode: darkMode ? 'dark' : 'light' } }), [darkMode]);
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        {/* Use our custom NavigationBar */}
+        {/* Navigation Bar */}
         <NavigationBar darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)} />
 
-        {/* Application Routes */}
         <Routes>
           {/* Public Routes */}
           <Route path="/auth" element={<AuthForm />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Protected Routes - requires authentication */}
+          {/* Protected Routes */}
           <Route element={<PrivateRoute />}>
             <Route path="/" element={<ClassesDashboard />} />
-            <Route path="/attendance/:classId" element={<AttendanceTracker />} />
+            <Route path="/attendance/:classId" element={<AdminAttendanceView />} />
+
+            {/* Teacher Routes */}
             <Route element={<PrivateRoute requiredRole="teacher" />}>
               <Route path="/teacher" element={<TeacherView />} />
             </Route>
+
+            {/* Admin Routes */}
             <Route element={<PrivateRoute requiredRole="admin" />}>
               <Route path="/admin" element={<AdminDashboard />} />
-              {/* New route for viewing attendance as Admin */}
-              <Route path="/admin/attendance/:classId" element={<AdminAttendanceView />} />
+              {/* Dedicated attendance page route (Option 1) */}
+              <Route path="/attendance-tracker/:classId" element={<AttendanceTracker />} />
             </Route>
           </Route>
         </Routes>

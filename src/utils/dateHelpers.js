@@ -1,11 +1,9 @@
 // src/utils/dateHelpers.js
-
 // Returns an array of Date objects for every Saturday of the given month and year.
 export const getSaturdaysOfMonth = (year, month) => {
     const saturdays = [];
-    // Start at the first day of the month.
     let date = new Date(year, month, 1);
-    // Find the first Saturday.
+    // Move to first Saturday.
     while (date.getDay() !== 6) {
       date.setDate(date.getDate() + 1);
     }

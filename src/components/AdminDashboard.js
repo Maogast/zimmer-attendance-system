@@ -30,13 +30,18 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs } from 'firebase/firestore';
+import { onSnapshot, collection } from 'firebase/firestore';
 import { db } from '../firebase';
-import { addMemberToClass, addNewClass, deleteMemberFromClass, deleteClass } from '../firebaseHelpers';
+import {
+  addMemberToClass,
+  addNewClass,
+  deleteMemberFromClass,
+  deleteClass,
+} from '../firebaseHelpers';
 import MarkSaturdayAttendance from './MarkSaturdayAttendance';
 
 const calculateClassAttendanceSummary = (classData) => {
@@ -83,10 +88,6 @@ const AdminDashboard = () => {
   const [newClassElder, setNewClassElder] = useState('');
   const [classModalError, setClassModalError] = useState('');
 
-  // State for Attendance Modal (for marking register).
-  const [openAttendanceModal, setOpenAttendanceModal] = useState(false);
-  const [selectedAttendanceClass, setSelectedAttendanceClass] = useState(null);
-
   // ---- Confirmation Dialog State ----
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
@@ -115,23 +116,19 @@ const AdminDashboard = () => {
     handleCloseDialog();
   };
 
-  // Fetch classes data from Firestore.
-  const fetchClasses = async () => {
-    try {
-      const classesCollection = collection(db, 'classes');
-      const classesSnapshot = await getDocs(classesCollection);
-      const classesList = classesSnapshot.docs.map((doc) => ({
+  // Use real-time listener to fetch classes
+  useEffect(() => {
+    const classesCollection = collection(db, 'classes');
+    const unsubscribe = onSnapshot(classesCollection, (snapshot) => {
+      const classesList = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       setClassesData(classesList);
-    } catch (error) {
-      console.error('Error fetching classes:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchClasses();
+    }, (error) => {
+      console.error('Error fetching real-time classes:', error);
+    });
+    return () => unsubscribe();
   }, []);
 
   const filteredData = classesData.filter((cls) => {
@@ -143,16 +140,13 @@ const AdminDashboard = () => {
   let aggregatedAttendances = 0;
   let aggregatedPossible = 0;
   filteredData.forEach((cls) => {
-    const { totalMembers, totalLessons, totalAttendances } =
-      calculateClassAttendanceSummary(cls);
+    const { totalMembers, totalLessons, totalAttendances } = calculateClassAttendanceSummary(cls);
     aggregatedMembers += totalMembers;
     aggregatedAttendances += totalAttendances;
     aggregatedPossible += totalMembers * totalLessons;
   });
   const overallAttendanceRate =
-    aggregatedPossible > 0
-      ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
-      : 'N/A';
+    aggregatedPossible > 0 ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2) : 'N/A';
 
   // ---------- Add Member Modal Functions ----------
   const handleOpenAddMemberModal = (classId) => {
@@ -174,30 +168,22 @@ const AdminDashboard = () => {
   };
 
   const handleAddMember = async () => {
-    if (
-      !newMemberFullName.trim() ||
-      !newMemberResidence.trim() ||
-      !newMemberPhone.trim() ||
-      !newMemberEmail.trim()
-    ) {
+    if (!newMemberFullName.trim() || !newMemberResidence.trim() || !newMemberPhone.trim() || !newMemberEmail.trim()) {
       setModalError('Please fill out all required fields.');
       return;
     }
-    // Duplicate check using email as unique identifier.
     const selectedClass = classesData.find((cls) => cls.id === selectedClassId);
     if (
       selectedClass &&
       selectedClass.members &&
       selectedClass.members.some(
-        (member) =>
-          member.email.toLowerCase() === newMemberEmail.trim().toLowerCase()
+        (member) => member.email.toLowerCase() === newMemberEmail.trim().toLowerCase()
       )
     ) {
       setModalError('Member already exists in this class.');
       return;
     }
-
-    const newMember = {
+    const newMemberObj = {
       fullName: newMemberFullName.trim(),
       residence: newMemberResidence.trim(),
       prayerCell: newMemberPrayerCell.trim(),
@@ -207,12 +193,11 @@ const AdminDashboard = () => {
       baptized: newMemberBaptized,
       attendance: [],
     };
-
     try {
-      await addMemberToClass(selectedClassId, newMember);
+      await addMemberToClass(selectedClassId, newMemberObj);
       setSnackbarMessage('Member added successfully!');
       setSnackbarOpen(true);
-      await fetchClasses();
+      // No need to call fetchClasses here as onSnapshot takes care of live updates.
       handleCloseAddMemberModal();
     } catch (error) {
       console.error(error);
@@ -249,23 +234,11 @@ const AdminDashboard = () => {
       await addNewClass(newClassData);
       setSnackbarMessage('Class added successfully!');
       setSnackbarOpen(true);
-      await fetchClasses();
       handleCloseAddClassModal();
     } catch (error) {
       setClassModalError('Error creating class, please try again.');
       console.error(error);
     }
-  };
-
-  // ---------- Attendance Modal Functions (for Admin) ----------
-  const handleOpenAttendanceModal = (cls) => {
-    setSelectedAttendanceClass(cls);
-    setOpenAttendanceModal(true);
-  };
-
-  const handleCloseAttendanceModal = () => {
-    setOpenAttendanceModal(false);
-    setSelectedAttendanceClass(null);
   };
 
   // ---------- Delete Functions using Confirmation Dialog ----------
@@ -278,7 +251,6 @@ const AdminDashboard = () => {
           await deleteMemberFromClass(classId, member);
           setSnackbarMessage('Member deleted successfully!');
           setSnackbarOpen(true);
-          await fetchClasses();
         } catch (error) {
           console.error(error);
         }
@@ -295,7 +267,6 @@ const AdminDashboard = () => {
           await deleteClass(classId);
           setSnackbarMessage('Class deleted successfully!');
           setSnackbarOpen(true);
-          await fetchClasses();
         } catch (error) {
           console.error(error);
         }
@@ -310,25 +281,16 @@ const AdminDashboard = () => {
       </Typography>
 
       {/* Button to Add New Class */}
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={handleOpenAddClassModal}
-        sx={{ mb: 2 }}
-      >
+      <Button variant="contained" color="primary" onClick={handleOpenAddClassModal} sx={{ mb: 2 }}>
         Add New Class
       </Button>
 
       {/* Filter Section */}
-      <Grid container spacing={2} style={{ marginBottom: '20px' }}>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={3}>
           <FormControl fullWidth>
             <InputLabel>Class Type</InputLabel>
-            <Select
-              value={filterClassType}
-              label="Class Type"
-              onChange={(e) => setFilterClassType(e.target.value)}
-            >
+            <Select value={filterClassType} label="Class Type" onChange={(e) => setFilterClassType(e.target.value)}>
               <MenuItem value="All">All</MenuItem>
               <MenuItem value="Church Service">Church Service</MenuItem>
             </Select>
@@ -337,7 +299,7 @@ const AdminDashboard = () => {
       </Grid>
 
       {/* Overview Cards */}
-      <Grid container spacing={3} style={{ marginBottom: '20px' }}>
+      <Grid container spacing={3} sx={{ mb: 2 }}>
         <Grid item xs={12} sm={4}>
           <Card>
             <CardContent>
@@ -383,8 +345,7 @@ const AdminDashboard = () => {
           </TableHead>
           <TableBody>
             {filteredData.map((cls) => {
-              const { totalMembers, totalLessons, totalAttendances, attendanceRate } =
-                calculateClassAttendanceSummary(cls);
+              const { totalMembers, totalLessons, totalAttendances, attendanceRate } = calculateClassAttendanceSummary(cls);
               return (
                 <TableRow
                   key={cls.id}
@@ -400,10 +361,7 @@ const AdminDashboard = () => {
                   <TableCell>
                     {cls.members && cls.members.length > 0 ? (
                       cls.members.map((member, index) => (
-                        <div
-                          key={index}
-                          style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}
-                        >
+                        <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
                           <span>{member.fullName}</span>
                           <IconButton
                             size="small"
@@ -434,12 +392,13 @@ const AdminDashboard = () => {
                     >
                       Add Member
                     </Button>
+                    {/* Mark Attendance button navigates to dedicated attendance page */}
                     <Button
                       variant="outlined"
                       color="secondary"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenAttendanceModal(cls);
+                        navigate(`/attendance-tracker/${cls.id}`);
                       }}
                       sx={{ mb: 1 }}
                     >
@@ -462,6 +421,29 @@ const AdminDashboard = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onClose={handleCloseDialog}>
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{confirmDialog.message}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleConfirm} color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for Confirmation Messages */}
+      <Snackbar
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+      />
 
       {/* Modal for Adding a New Member */}
       <Modal
@@ -527,22 +509,14 @@ const AdminDashboard = () => {
           />
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Membership</InputLabel>
-            <Select
-              value={newMemberMembership}
-              label="Membership"
-              onChange={(e) => setNewMemberMembership(e.target.value)}
-            >
+            <Select value={newMemberMembership} label="Membership" onChange={(e) => setNewMemberMembership(e.target.value)}>
               <MenuItem value="Member">Member</MenuItem>
               <MenuItem value="Visitor">Visitor</MenuItem>
             </Select>
           </FormControl>
           <FormControl component="fieldset" sx={{ mt: 2 }}>
             <FormLabel component="legend">Baptized</FormLabel>
-            <RadioGroup
-              row
-              value={newMemberBaptized}
-              onChange={(e) => setNewMemberBaptized(e.target.value)}
-            >
+            <RadioGroup row value={newMemberBaptized} onChange={(e) => setNewMemberBaptized(e.target.value)}>
               <FormControlLabel value="Baptized" control={<Radio />} label="Baptized" />
               <FormControlLabel value="Not Baptized" control={<Radio />} label="Not Baptized" />
             </RadioGroup>
@@ -557,120 +531,6 @@ const AdminDashboard = () => {
           </Button>
         </Box>
       </Modal>
-
-      {/* Modal for Adding a New Class */}
-      <Modal
-        open={openAddClassModal}
-        onClose={handleCloseAddClassModal}
-        aria-labelledby="add-class-modal-title"
-        aria-describedby="add-class-modal-description"
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 400,
-            bgcolor: 'background.paper',
-            border: '2px solid #000',
-            boxShadow: 24,
-            p: 4,
-          }}
-        >
-          <Typography id="add-class-modal-title" variant="h6" component="h2">
-            Add New Class
-          </Typography>
-          <TextField
-            label="Class Name"
-            value={newClassName}
-            onChange={(e) => setNewClassName(e.target.value)}
-            fullWidth
-            required
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Teacher"
-            value={newClassTeacher}
-            onChange={(e) => setNewClassTeacher(e.target.value)}
-            fullWidth
-            required
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Elder (Optional)"
-            value={newClassElder}
-            onChange={(e) => setNewClassElder(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
-          />
-          {classModalError && (
-            <Typography color="error" sx={{ mt: 1 }}>
-              {classModalError}
-            </Typography>
-          )}
-          <Button variant="contained" onClick={handleCreateClass} sx={{ mt: 2 }} fullWidth>
-            Create Class
-          </Button>
-        </Box>
-      </Modal>
-
-      {/* Modal for Marking Attendance (for Admin) */}
-      <Modal
-        open={openAttendanceModal}
-        onClose={handleCloseAttendanceModal}
-        aria-labelledby="attendance-modal-title"
-        aria-describedby="attendance-modal-description"
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 500,
-            maxHeight: '80vh',
-            bgcolor: 'background.paper',
-            border: '2px solid #000',
-            boxShadow: 24,
-            p: 4,
-            overflowY: 'auto',
-          }}
-        >
-          {selectedAttendanceClass && (
-            <MarkSaturdayAttendance
-              classData={selectedAttendanceClass}
-              onAttendanceMarked={() => {
-                fetchClasses();
-                handleCloseAttendanceModal();
-              }}
-            />
-          )}
-        </Box>
-      </Modal>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog.open} onClose={handleCloseDialog}>
-        <DialogTitle>{confirmDialog.title}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{confirmDialog.message}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleConfirm} color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar for Confirmation Messages */}
-      <Snackbar
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        message={snackbarMessage}
-      />
     </div>
   );
 };

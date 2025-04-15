@@ -22,11 +22,13 @@ import {
 } from '@mui/material';
 import { format } from 'date-fns';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
+import { submitAttendanceForClass } from '../firebaseHelpers';
 
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // For demonstration we use a simple lookup; in production you would fetch this from Firestore.
+  // In a real implementation, fetch class details from Firestore.
+  // For now, we use a static lookup.
   const getClassById = (id) => {
     const classesInfo = [
       { id: 'bethlehem', name: 'Bethlehem Class', teacher: 'Teacher Bethlehem', elder: 'Elder Bethlehem' },
@@ -42,7 +44,7 @@ const AttendanceTracker = () => {
 
   const classInfo = getClassById(classId) || {};
 
-  // Pre-populate header details from class information.
+  // Header fields pre-populated from class info.
   const [className, setClassName] = useState(classInfo.name || '');
   const [teacher, setTeacher] = useState(classInfo.teacher || '');
   const [elder, setElder] = useState(classInfo.elder || '');
@@ -50,7 +52,7 @@ const AttendanceTracker = () => {
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
 
-  // State to manage members.
+  // Manage members locally.
   const [members, setMembers] = useState([]);
   const [newMember, setNewMember] = useState({
     fullName: '',
@@ -71,7 +73,7 @@ const AttendanceTracker = () => {
     const newEmail = newMember.email.trim().toLowerCase();
     const newPhone = newMember.phoneNumber.trim();
 
-    // Check for duplicate members by email or phone.
+    // Check for duplicates by email or phone.
     const duplicate = members.find((member) => {
       const memberEmail = member.email.trim().toLowerCase();
       const memberPhone = member.phoneNumber.trim();
@@ -79,18 +81,14 @@ const AttendanceTracker = () => {
     });
 
     if (duplicate) {
-      alert(`A member with the same Email or Phone number already exists.`);
+      alert('A member with the same Email or Phone number already exists.');
       return;
     }
-
-    // Initialize attendance: one boolean for each Saturday.
     const memberToAdd = {
       ...newMember,
       attendance: new Array(saturdays.length).fill(false),
     };
     setMembers([...members, memberToAdd]);
-
-    // Reset the new member form.
     setNewMember({
       fullName: '',
       residence: '',
@@ -109,15 +107,57 @@ const AttendanceTracker = () => {
   };
 
   const handleNewMemberChange = (field, value) => {
-    setNewMember({
-      ...newMember,
-      [field]: value,
-    });
+    setNewMember({ ...newMember, [field]: value });
   };
 
-  const handleSubmitAttendance = () => {
-    // Here you would typically persist the attendance record to your backend (e.g., Firestore).
-    console.log('Submitting attendance data:', {
+  // --- CSV Export Feature ---
+  const exportAttendanceToCSV = () => {
+    // Construct CSV header row
+    const header = [
+      'No.',
+      'Full Name',
+      'Residence',
+      'Prayer Cell',
+      'Phone',
+      'Email',
+      'Membership Status',
+      'Baptized?',
+      ...saturdays.map((sat) => format(sat, 'dd/MM')),
+    ];
+    // Prepare rows from members data.
+    const rows = members.map((member, index) => [
+      index + 1,
+      member.fullName,
+      member.residence,
+      member.prayerCell,
+      member.phoneNumber,
+      member.email,
+      member.membershipStatus,
+      member.baptized ? 'Yes' : 'No',
+      ...member.attendance.map((present) => (present ? 'P' : 'A')), // P = Present, A = Absent
+    ]);
+    const csvContent = [header, ...rows]
+      .map((row) =>
+        row
+          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+          .join(',')
+      )
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${className || 'Attendance'}-${month + 1}-${year}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- Submit Attendance Feature ---
+  const handleSubmitAttendance = async () => {
+    const attendanceData = {
+      recordId: `${year}-${month}`,
       className,
       teacher,
       elder,
@@ -125,38 +165,28 @@ const AttendanceTracker = () => {
       year,
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
       members,
-    });
-    alert('Attendance submitted successfully!');
-    // Optionally, perform a redirect or clear states as needed.
+    };
+
+    try {
+      await submitAttendanceForClass(classId, attendanceData);
+      alert('Attendance submitted successfully!');
+    } catch (error) {
+      alert('Error submitting attendance, please try again.');
+    }
   };
 
   return (
     <div style={{ padding: '20px', overflowX: 'auto' }}>
       {/* Header Form */}
-      <Grid container spacing={2} marginBottom={2}>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Class Name"
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Class Name" value={className} onChange={(e) => setClassName(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Teacher(s)"
-            value={teacher}
-            onChange={(e) => setTeacher(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Teacher(s)" value={teacher} onChange={(e) => setTeacher(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Elder Attached"
-            value={elder}
-            onChange={(e) => setElder(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Elder Attached" value={elder} onChange={(e) => setElder(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={6} md={2}>
           <TextField
@@ -183,7 +213,7 @@ const AttendanceTracker = () => {
       </Typography>
 
       {/* Attendance Data Table */}
-      <TableContainer component={Paper} style={{ marginBottom: '20px', minWidth: '1100px' }}>
+      <TableContainer component={Paper} sx={{ mb: 2, minWidth: '1100px' }}>
         <Table>
           <TableHead>
             <TableRow>
@@ -289,10 +319,19 @@ const AttendanceTracker = () => {
         </Table>
       </TableContainer>
 
-      {/* Submit Attendance Button */}
-      <Button variant="contained" color="primary" onClick={handleSubmitAttendance}>
-        Submit Attendance
-      </Button>
+      {/* Action Buttons */}
+      <Grid container spacing={2}>
+        <Grid item>
+          <Button variant="outlined" color="secondary" onClick={exportAttendanceToCSV}>
+            Export to CSV
+          </Button>
+        </Grid>
+        <Grid item>
+          <Button variant="contained" color="primary" onClick={handleSubmitAttendance}>
+            Submit Attendance
+          </Button>
+        </Grid>
+      </Grid>
     </div>
   );
 };
