@@ -1,4 +1,5 @@
 // src/components/AdminDashboard.js
+import { updateClassMembers } from '../firebaseHelpers';
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -23,41 +24,14 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-// Sample data for classes (you might replace this with Firestore data later)
-const sampleData = [
-  {
-    id: 'bethlehem',
-    name: 'Bethlehem Class',
-    teacher: 'Teacher Bethlehem',
-    elder: 'Elder Bethlehem',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Alice', attendance: [true, false, true, true] },
-      { fullName: 'Bob', attendance: [true, true, false, true] },
-      { fullName: 'Charlie', attendance: [false, false, true, false] },
-    ],
-  },
-  {
-    id: 'judea',
-    name: 'Judea Class',
-    teacher: 'Teacher Judea',
-    elder: 'Elder Judea',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'David', attendance: [true, true, true, true] },
-      { fullName: 'Eve', attendance: [false, true, true, false] },
-    ],
-  },
-  // ... Additional classes as needed
-];
-
+// Utility function to calculate attendance metrics for a given class.
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
-  const totalMembers = members.length;
-  const totalLessons = members[0] ? members[0].attendance.length : 0;
+  const totalMembers = members?.length || 0;
+  const totalLessons = members?.[0]?.attendance?.length || 0;
   let totalAttendances = 0;
-  members.forEach((member) => {
-    totalAttendances += member.attendance.filter((x) => x).length;
+  members?.forEach((member) => {
+    totalAttendances += member.attendance?.filter((x) => x).length || 0;
   });
   const possibleAttendances = totalMembers * totalLessons;
   const attendanceRate =
@@ -69,19 +43,31 @@ const calculateClassAttendanceSummary = (classData) => {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-
-  // Filter states for classes
   const [filterClassType, setFilterClassType] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
-  // Classes state — using static sampleData; later replace with dynamic Firestore data.
-  const [classesData, setClassesData] = useState(sampleData);
-
-  // State for User Role Management.
+  const [classesData, setClassesData] = useState([]);
   const [users, setUsers] = useState([]);
 
-  // Fetch users from Firestore on component mount.
+  // Fetch classes from Firestore on mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const classesCollection = collection(db, 'classes');
+        const classesSnapshot = await getDocs(classesCollection);
+        const classesList = classesSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setClassesData(classesList);
+      } catch (error) {
+        console.error('Error fetching classes:', error);
+      }
+    };
+    fetchClasses();
+  }, []);
+
+  // Fetch users from Firestore on mount
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -99,7 +85,7 @@ const AdminDashboard = () => {
     fetchUsers();
   }, []);
 
-  // Handle role change updates.
+  // Handle changes to a user's role
   const handleRoleChange = async (userId, newRole) => {
     try {
       const userDocRef = doc(db, 'users', userId);
@@ -114,7 +100,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // Filter classes based on class type (and date filters as needed)
+  // Filter classes based on selected class type (additional date filters can be applied later)
   const filteredData = classesData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
@@ -141,7 +127,7 @@ const AdminDashboard = () => {
         Admin Dashboard
       </Typography>
 
-      {/* Filters Section for Classes */}
+      {/* Filters Section */}
       <Grid container spacing={2} style={{ marginBottom: '20px' }}>
         <Grid item xs={12} md={3}>
           <FormControl fullWidth>
@@ -184,7 +170,7 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Overview Cards for Classes */}
+      {/* Overview Cards */}
       <Grid container spacing={3} style={{ marginBottom: '20px' }}>
         <Grid item xs={12} sm={4}>
           <Card>
@@ -243,11 +229,9 @@ const AdminDashboard = () => {
                   <TableCell>{cls.teacher}</TableCell>
                   <TableCell>{cls.elder}</TableCell>
                   <TableCell>{cls.classType}</TableCell>
-                  {/* Show member count */}
                   <TableCell>{totalMembers}</TableCell>
-                  {/* Show all member names (comma-separated) */}
                   <TableCell>
-                    {cls.members.map((member) => member.fullName).join(', ')}
+                    {cls.members ? cls.members.map(member => member.fullName).join(', ') : 'No members'}
                   </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
