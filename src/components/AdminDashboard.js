@@ -1,5 +1,5 @@
-// src/components/AdminDashboard.js
 import { updateClassMembers } from '../firebaseHelpers';
+// src/components/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
 import {
   Card,

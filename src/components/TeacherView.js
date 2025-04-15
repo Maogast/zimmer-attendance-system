@@ -1,5 +1,5 @@
-// src/components/TeacherView.js
 import { updateClassMembers } from '../firebaseHelpers';
+// src/components/TeacherView.js
 import React from "react";
 
 export default function TeacherView() {
