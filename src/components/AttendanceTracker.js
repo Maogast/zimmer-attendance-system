@@ -27,8 +27,7 @@ import { submitAttendanceForClass } from '../firebaseHelpers';
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // In a real implementation, fetch class details from Firestore.
-  // For now, we use a static lookup.
+  // Static lookup for class details (in production fetch from Firestore)
   const getClassById = (id) => {
     const classesInfo = [
       { id: 'bethlehem', name: 'Bethlehem Class', teacher: 'Teacher Bethlehem', elder: 'Elder Bethlehem' },
@@ -44,7 +43,7 @@ const AttendanceTracker = () => {
 
   const classInfo = getClassById(classId) || {};
 
-  // Header fields pre-populated from class info.
+  // Header fields
   const [className, setClassName] = useState(classInfo.name || '');
   const [teacher, setTeacher] = useState(classInfo.teacher || '');
   const [elder, setElder] = useState(classInfo.elder || '');
@@ -73,7 +72,6 @@ const AttendanceTracker = () => {
     const newEmail = newMember.email.trim().toLowerCase();
     const newPhone = newMember.phoneNumber.trim();
 
-    // Check for duplicates by email or phone.
     const duplicate = members.find((member) => {
       const memberEmail = member.email.trim().toLowerCase();
       const memberPhone = member.phoneNumber.trim();
@@ -110,9 +108,8 @@ const AttendanceTracker = () => {
     setNewMember({ ...newMember, [field]: value });
   };
 
-  // --- CSV Export Feature ---
+  // CSV Export Feature
   const exportAttendanceToCSV = () => {
-    // Construct CSV header row
     const header = [
       'No.',
       'Full Name',
@@ -124,7 +121,6 @@ const AttendanceTracker = () => {
       'Baptized?',
       ...saturdays.map((sat) => format(sat, 'dd/MM')),
     ];
-    // Prepare rows from members data.
     const rows = members.map((member, index) => [
       index + 1,
       member.fullName,
@@ -134,14 +130,10 @@ const AttendanceTracker = () => {
       member.email,
       member.membershipStatus,
       member.baptized ? 'Yes' : 'No',
-      ...member.attendance.map((present) => (present ? 'P' : 'A')), // P = Present, A = Absent
+      ...member.attendance.map((present) => (present ? 'P' : 'A')),
     ]);
     const csvContent = [header, ...rows]
-      .map((row) =>
-        row
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(',')
-      )
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -154,7 +146,7 @@ const AttendanceTracker = () => {
     document.body.removeChild(link);
   };
 
-  // --- Submit Attendance Feature ---
+  // Submit Attendance Feature
   const handleSubmitAttendance = async () => {
     const attendanceData = {
       recordId: `${year}-${month}`,
@@ -180,13 +172,28 @@ const AttendanceTracker = () => {
       {/* Header Form */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
-          <TextField label="Class Name" value={className} onChange={(e) => setClassName(e.target.value)} fullWidth />
+          <TextField
+            label="Class Name"
+            value={className}
+            onChange={(e) => setClassName(e.target.value)}
+            fullWidth
+          />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField label="Teacher(s)" value={teacher} onChange={(e) => setTeacher(e.target.value)} fullWidth />
+          <TextField
+            label="Teacher(s)"
+            value={teacher}
+            onChange={(e) => setTeacher(e.target.value)}
+            fullWidth
+          />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField label="Elder Attached" value={elder} onChange={(e) => setElder(e.target.value)} fullWidth />
+          <TextField
+            label="Elder Attached"
+            value={elder}
+            onChange={(e) => setElder(e.target.value)}
+            fullWidth
+          />
         </Grid>
         <Grid item xs={6} md={2}>
           <TextField
@@ -322,7 +329,7 @@ const AttendanceTracker = () => {
       {/* Action Buttons */}
       <Grid container spacing={2}>
         <Grid item>
-          <Button variant="outlined" color="secondary" onClick={exportAttendanceToCSV}>
+          <Button variant="outlined" color="secondary" onClick={() => exportAttendanceToCSV()} sx={{ mr: 2 }}>
             Export to CSV
           </Button>
         </Grid>

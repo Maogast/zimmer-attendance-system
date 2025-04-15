@@ -35,6 +35,18 @@ export const addNewClass = async (classData) => {
   }
 };
 
+// Function to update an existing class document.
+export const updateClass = async (classId, updatedClassData) => {
+  try {
+    const classRef = doc(db, 'classes', classId);
+    await updateDoc(classRef, updatedClassData);
+    console.log('Class updated successfully!');
+  } catch (error) {
+    console.error('Error updating class:', error);
+    throw error;
+  }
+};
+
 // Function to delete a member from a class document.
 export const deleteMemberFromClass = async (classId, member) => {
   try {
@@ -58,12 +70,11 @@ export const deleteClass = async (classId) => {
   }
 };
 
-// NEW: Function to submit attendance data.
-// This writes the attendance record to the attendanceRecords subcollection of the class.
+// Function to submit attendance data.
+// Writes the attendance record to the attendanceRecords subcollection.
 export const submitAttendanceForClass = async (classId, attendanceData) => {
   try {
-    // Create a record ID based on year and month (e.g., "2025-4")
-    const recordId = `${attendanceData.year}-${attendanceData.month}`;
+    const recordId = `${attendanceData.year}-${attendanceData.month}`; // e.g., "2025-4"
     attendanceData.timestamp = serverTimestamp();
     const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
     await setDoc(attendanceDocRef, attendanceData, { merge: true });
@@ -74,7 +85,7 @@ export const submitAttendanceForClass = async (classId, attendanceData) => {
   }
 };
 
-// NEW: Function to retrieve attendance records for a class.
+// Function to retrieve attendance records for a class.
 export const getAttendanceRecordsForClass = async (classId) => {
   try {
     const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
