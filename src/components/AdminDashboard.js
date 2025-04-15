@@ -1,5 +1,4 @@
 // src/components/AdminDashboard.js
-import { addMemberToClass, addNewClass } from '../firebaseHelpers';
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -30,7 +29,6 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addMemberToClass, addNewClass } from '../firebaseHelpers';
-
 // Utility function to calculate attendance metrics for a class.
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
