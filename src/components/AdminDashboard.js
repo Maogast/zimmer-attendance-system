@@ -20,12 +20,10 @@ import {
   Button,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-
-// Firebase Firestore imports for User Role Management
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-// Updated sample data with new classes
+// Sample data for classes (you might replace this with a Firestore collection when ready)
 const sampleData = [
   {
     id: 'bethlehem',
@@ -112,46 +110,28 @@ const calculateClassAttendanceSummary = (classData) => {
   const totalMembers = members.length;
   const totalLessons = members[0] ? members[0].attendance.length : 0;
   let totalAttendances = 0;
-  members.forEach((member) => {
-    totalAttendances += member.attendance.filter((x) => x).length;
+  members.forEach(member => {
+    totalAttendances += member.attendance.filter(x => x).length;
   });
   const possibleAttendances = totalMembers * totalLessons;
-  const attendanceRate =
-    possibleAttendances > 0
-      ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
-      : 'N/A';
+  const attendanceRate = possibleAttendances > 0
+    ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
+    : 'N/A';
   return { totalMembers, totalLessons, totalAttendances, attendanceRate };
 };
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
-  // Existing filter states for classes
+  // Filter states for classes
   const [filterClassType, setFilterClassType] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const filteredData = sampleData.filter((cls) => {
-    if (filterClassType === 'All') return true;
-    return cls.classType === filterClassType;
-  });
+  // Classes state – using static sampleData; later replace with dynamic Firestore data.
+  const [classesData, setClassesData] = useState(sampleData);
 
-  let aggregatedMembers = 0;
-  let aggregatedAttendances = 0;
-  let aggregatedPossible = 0;
-  filteredData.forEach((cls) => {
-    const { totalMembers, totalLessons, totalAttendances } =
-      calculateClassAttendanceSummary(cls);
-    aggregatedMembers += totalMembers;
-    aggregatedAttendances += totalAttendances;
-    aggregatedPossible += totalMembers * totalLessons;
-  });
-  const overallAttendanceRate =
-    aggregatedPossible > 0
-      ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
-      : 'N/A';
-
-  // New state for User Role Management.
+  // State for User Role Management.
   const [users, setUsers] = useState([]);
 
   // Fetch users from Firestore on component mount.
@@ -177,7 +157,6 @@ const AdminDashboard = () => {
     try {
       const userDocRef = doc(db, 'users', userId);
       await updateDoc(userDocRef, { role: newRole });
-      // Update local state to reflect role change.
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
           user.id === userId ? { ...user, role: newRole } : user
@@ -187,6 +166,25 @@ const AdminDashboard = () => {
       console.error('Error updating role:', error);
     }
   };
+
+  // Filter classes based on class type (and date filters as needed)
+  const filteredData = classesData.filter(cls => {
+    if (filterClassType === 'All') return true;
+    return cls.classType === filterClassType;
+  });
+
+  let aggregatedMembers = 0;
+  let aggregatedAttendances = 0;
+  let aggregatedPossible = 0;
+  filteredData.forEach(cls => {
+    const { totalMembers, totalLessons, totalAttendances } = calculateClassAttendanceSummary(cls);
+    aggregatedMembers += totalMembers;
+    aggregatedAttendances += totalAttendances;
+    aggregatedPossible += totalMembers * totalLessons;
+  });
+  const overallAttendanceRate = aggregatedPossible > 0
+    ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
+    : 'N/A';
 
   return (
     <div style={{ padding: '20px' }}>
@@ -306,9 +304,7 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* ------------------- */}
-      {/* User Role Management */}
-      {/* ------------------- */}
+      {/* User Role Management Section */}
       <Typography variant="h5" gutterBottom style={{ marginTop: '40px' }}>
         User Role Management
       </Typography>
