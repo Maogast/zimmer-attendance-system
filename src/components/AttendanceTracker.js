@@ -25,16 +25,16 @@ import { getSaturdaysOfMonth } from '../utils/dateHelpers';
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // Updated lookup: Use new classes information
+  // For demonstration we use a simple lookup; in production you would fetch this from Firestore.
   const getClassById = (id) => {
     const classesInfo = [
       { id: 'bethlehem', name: 'Bethlehem Class', teacher: 'Teacher Bethlehem', elder: 'Elder Bethlehem' },
-      { id: 'judea', name: 'Judea', teacher: 'Teacher Judea', elder: 'Elder Judea' },
-      { id: 'galilee', name: 'Galilee', teacher: 'Teacher Galilee', elder: 'Elder Galilee' },
-      { id: 'samaria', name: 'Samaria', teacher: 'Teacher Samaria', elder: 'Elder Samaria' },
-      { id: 'nazareth', name: 'Nazareth', teacher: 'Teacher Nazareth', elder: 'Elder Nazareth' },
-      { id: 'baptismal', name: 'Baptismal', teacher: 'Teacher Baptismal', elder: 'Elder Baptismal' },
-      { id: 'jerusalem', name: 'Jerusalem', teacher: 'Teacher Jerusalem', elder: 'Elder Jerusalem' },
+      { id: 'judea', name: 'Judea Class', teacher: 'Teacher Judea', elder: 'Elder Judea' },
+      { id: 'galilee', name: 'Galilee Class', teacher: 'Teacher Galilee', elder: 'Elder Galilee' },
+      { id: 'samaria', name: 'Samaria Class', teacher: 'Teacher Samaria', elder: 'Elder Samaria' },
+      { id: 'nazareth', name: 'Nazareth Class', teacher: 'Teacher Nazareth', elder: 'Elder Nazareth' },
+      { id: 'baptismal', name: 'Baptismal Class', teacher: 'Teacher Baptismal', elder: 'Elder Baptismal' },
+      { id: 'jerusalem', name: 'Jerusalem Class', teacher: 'Teacher Jerusalem', elder: 'Elder Jerusalem' },
     ];
     return classesInfo.find((cls) => cls.id === id);
   };
@@ -49,7 +49,7 @@ const AttendanceTracker = () => {
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
 
-  // State to manage members
+  // State to manage members.
   const [members, setMembers] = useState([]);
   const [newMember, setNewMember] = useState({
     fullName: '',
@@ -66,14 +66,11 @@ const AttendanceTracker = () => {
   }, [month, year]);
 
   const addMember = () => {
-    // Ensure the full name is provided.
     if (newMember.fullName.trim() === '') return;
-
-    // Normalize email and phone for duplicate checking.
     const newEmail = newMember.email.trim().toLowerCase();
     const newPhone = newMember.phoneNumber.trim();
 
-    // Check for duplicate members based on email or phone number.
+    // Check for duplicate members by email or phone.
     const duplicate = members.find((member) => {
       const memberEmail = member.email.trim().toLowerCase();
       const memberPhone = member.phoneNumber.trim();
@@ -85,7 +82,7 @@ const AttendanceTracker = () => {
       return;
     }
 
-    // Create new member and initialize attendance array.
+    // Initialize attendance: one boolean for each Saturday.
     const memberToAdd = {
       ...newMember,
       attendance: new Array(saturdays.length).fill(false),
@@ -106,8 +103,7 @@ const AttendanceTracker = () => {
 
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
-    updatedMembers[memberIndex].attendance[satIndex] =
-      !updatedMembers[memberIndex].attendance[satIndex];
+    updatedMembers[memberIndex].attendance[satIndex] = !updatedMembers[memberIndex].attendance[satIndex];
     setMembers(updatedMembers);
   };
 
@@ -118,6 +114,21 @@ const AttendanceTracker = () => {
     });
   };
 
+  const handleSubmitAttendance = () => {
+    // Here you would typically persist the attendance record to your backend (e.g., Firestore).
+    console.log('Submitting attendance data:', {
+      className,
+      teacher,
+      elder,
+      month,
+      year,
+      saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
+      members,
+    });
+    alert('Attendance submitted successfully!');
+    // Optionally, perform a redirect or clear states as needed.
+  };
+
   return (
     <div style={{ padding: '20px', overflowX: 'auto' }}>
       {/* Header Form */}
@@ -126,7 +137,7 @@ const AttendanceTracker = () => {
           <TextField
             label="Class Name"
             value={className}
-            onChange={e => setClassName(e.target.value)}
+            onChange={(e) => setClassName(e.target.value)}
             fullWidth
           />
         </Grid>
@@ -134,7 +145,7 @@ const AttendanceTracker = () => {
           <TextField
             label="Teacher(s)"
             value={teacher}
-            onChange={e => setTeacher(e.target.value)}
+            onChange={(e) => setTeacher(e.target.value)}
             fullWidth
           />
         </Grid>
@@ -142,7 +153,7 @@ const AttendanceTracker = () => {
           <TextField
             label="Elder Attached"
             value={elder}
-            onChange={e => setElder(e.target.value)}
+            onChange={(e) => setElder(e.target.value)}
             fullWidth
           />
         </Grid>
@@ -151,7 +162,7 @@ const AttendanceTracker = () => {
             label="Month (0-11)"
             type="number"
             value={month}
-            onChange={e => setMonth(parseInt(e.target.value))}
+            onChange={(e) => setMonth(parseInt(e.target.value))}
             fullWidth
           />
         </Grid>
@@ -160,15 +171,15 @@ const AttendanceTracker = () => {
             label="Year"
             type="number"
             value={year}
-            onChange={e => setYear(parseInt(e.target.value))}
+            onChange={(e) => setYear(parseInt(e.target.value))}
             fullWidth
           />
         </Grid>
       </Grid>
 
-      <h3>
+      <Typography variant="h5" gutterBottom>
         {className || 'Class Name'} Attendance for {month + 1}/{year}
-      </h3>
+      </Typography>
 
       {/* Attendance Data Table */}
       <TableContainer component={Paper} style={{ marginBottom: '20px', minWidth: '1100px' }}>
@@ -201,10 +212,7 @@ const AttendanceTracker = () => {
                 <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
                 {member.attendance.map((present, satIndex) => (
                   <TableCell key={satIndex}>
-                    <Checkbox
-                      checked={present}
-                      onChange={() => toggleAttendance(index, satIndex)}
-                    />
+                    <Checkbox checked={present} onChange={() => toggleAttendance(index, satIndex)} />
                   </TableCell>
                 ))}
               </TableRow>
@@ -215,7 +223,7 @@ const AttendanceTracker = () => {
                 <TextField
                   placeholder="Full Name"
                   value={newMember.fullName}
-                  onChange={e => handleNewMemberChange('fullName', e.target.value)}
+                  onChange={(e) => handleNewMemberChange('fullName', e.target.value)}
                   fullWidth
                 />
               </TableCell>
@@ -223,7 +231,7 @@ const AttendanceTracker = () => {
                 <TextField
                   placeholder="Residence"
                   value={newMember.residence}
-                  onChange={e => handleNewMemberChange('residence', e.target.value)}
+                  onChange={(e) => handleNewMemberChange('residence', e.target.value)}
                   fullWidth
                 />
               </TableCell>
@@ -231,7 +239,7 @@ const AttendanceTracker = () => {
                 <TextField
                   placeholder="Prayer Cell"
                   value={newMember.prayerCell}
-                  onChange={e => handleNewMemberChange('prayerCell', e.target.value)}
+                  onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)}
                   fullWidth
                 />
               </TableCell>
@@ -239,7 +247,7 @@ const AttendanceTracker = () => {
                 <TextField
                   placeholder="Phone"
                   value={newMember.phoneNumber}
-                  onChange={e => handleNewMemberChange('phoneNumber', e.target.value)}
+                  onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)}
                   fullWidth
                 />
               </TableCell>
@@ -247,7 +255,7 @@ const AttendanceTracker = () => {
                 <TextField
                   placeholder="Email"
                   value={newMember.email}
-                  onChange={e => handleNewMemberChange('email', e.target.value)}
+                  onChange={(e) => handleNewMemberChange('email', e.target.value)}
                   fullWidth
                 />
               </TableCell>
@@ -257,7 +265,7 @@ const AttendanceTracker = () => {
                   <Select
                     value={newMember.membershipStatus}
                     label="Membership Status"
-                    onChange={e => handleNewMemberChange('membershipStatus', e.target.value)}
+                    onChange={(e) => handleNewMemberChange('membershipStatus', e.target.value)}
                   >
                     <MenuItem value="Member">Member</MenuItem>
                     <MenuItem value="Non-Member">Non-Member</MenuItem>
@@ -266,12 +274,7 @@ const AttendanceTracker = () => {
               </TableCell>
               <TableCell>
                 <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={newMember.baptized}
-                      onChange={e => handleNewMemberChange('baptized', e.target.checked)}
-                    />
-                  }
+                  control={<Checkbox checked={newMember.baptized} onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} />}
                   label="Baptized"
                 />
               </TableCell>
@@ -285,21 +288,10 @@ const AttendanceTracker = () => {
         </Table>
       </TableContainer>
 
-      <pre>
-        {JSON.stringify(
-          {
-            className,
-            teacher,
-            elder,
-            month,
-            year,
-            saturdays: saturdays.map(sat => format(sat, 'yyyy-MM-dd')),
-            members,
-          },
-          null,
-          2
-        )}
-      </pre>
+      {/* Submit Attendance Button */}
+      <Button variant="contained" color="primary" onClick={handleSubmitAttendance}>
+        Submit Attendance
+      </Button>
     </div>
   );
 };
