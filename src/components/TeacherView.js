@@ -1,18 +1,18 @@
 // src/components/TeacherView.js
 import React, { useState, useEffect } from 'react';
-import { Typography, Box } from '@mui/material';
+import { Typography, Box, Button } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import AddMemberForm from './AddMemberForm';
+import MarkSaturdayAttendance from './TempAttendace';
 
 const TeacherView = () => {
-  // Assume your route includes the classId parameter.
   const { classId } = useParams();
   const [classData, setClassData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAttendanceForm, setShowAttendanceForm] = useState(false);
 
-  // Function to fetch the class data from Firestore.
   const fetchClassData = async () => {
     try {
       const classDocRef = doc(db, 'classes', classId);
@@ -34,8 +34,12 @@ const TeacherView = () => {
   }, [classId]);
 
   const handleMemberAdded = () => {
-    // Pull fresh data after adding a member.
+    // Refresh class data to reflect any new members.
     fetchClassData();
+  };
+
+  const toggleAttendanceForm = () => {
+    setShowAttendanceForm(!showAttendanceForm);
   };
 
   if (loading) {
@@ -48,13 +52,24 @@ const TeacherView = () => {
         Teacher View - {classData?.name}
       </Typography>
       
-      {/* Displaying current members */}
       <Typography variant="h6" sx={{ mb: 2 }}>
         Members: {classData?.members ? classData.members.map(m => m.fullName).join(', ') : 'No members yet'}
       </Typography>
       
       {/* Form to add a new member */}
       <AddMemberForm classId={classData.id} onMemberAdded={handleMemberAdded} />
+
+      {/* Toggle button for attendance marking */}
+      <Button variant="contained" sx={{ mt: 3 }} onClick={toggleAttendanceForm}>
+        {showAttendanceForm ? 'Hide Attendance Form' : 'Mark Saturday Attendance'}
+      </Button>
+
+      {showAttendanceForm && (
+        <MarkSaturdayAttendance
+          classData={classData}
+          onAttendanceMarked={fetchClassData}
+        />
+      )}
     </Box>
   );
 };

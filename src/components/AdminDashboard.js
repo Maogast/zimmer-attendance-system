@@ -24,16 +24,18 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Snackbar,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addMemberToClass, addNewClass } from '../firebaseHelpers';
-// Utility function to calculate attendance metrics for a class.
+// Import the attendance marking component
+import MarkSaturdayAttendance from './TempAttendace';
+
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
   const totalMembers = members?.length || 0;
-  // For demonstration, assume each member has an attendance array (could be session values) 
   const totalLessons = members?.[0]?.attendance?.length || 0;
   let totalAttendances = 0;
   members?.forEach((member) => {
@@ -52,10 +54,13 @@ const AdminDashboard = () => {
   const [filterClassType, setFilterClassType] = useState('All');
   const [classesData, setClassesData] = useState([]);
 
+  // Snackbar state for confirmation messages.
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
   // State for Add Member modal.
   const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
-  // New Member fields:
   const [newMemberFullName, setNewMemberFullName] = useState('');
   const [newMemberResidence, setNewMemberResidence] = useState('');
   const [newMemberPrayerCell, setNewMemberPrayerCell] = useState('');
@@ -72,7 +77,11 @@ const AdminDashboard = () => {
   const [newClassElder, setNewClassElder] = useState('');
   const [classModalError, setClassModalError] = useState('');
 
-  // Fetch all classes from Firestore.
+  // State for Attendance Modal (for marking register).
+  const [openAttendanceModal, setOpenAttendanceModal] = useState(false);
+  const [selectedAttendanceClass, setSelectedAttendanceClass] = useState(null);
+
+  // Fetch classes data from Firestore.
   const fetchClasses = async () => {
     try {
       const classesCollection = collection(db, 'classes');
@@ -91,13 +100,11 @@ const AdminDashboard = () => {
     fetchClasses();
   }, []);
 
-  // Filter classes by type (if needed)
   const filteredData = classesData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
   });
 
-  // Aggregate overview data.
   let aggregatedMembers = 0;
   let aggregatedAttendances = 0;
   let aggregatedPossible = 0;
@@ -122,7 +129,6 @@ const AdminDashboard = () => {
   const handleCloseAddMemberModal = () => {
     setOpenAddMemberModal(false);
     setSelectedClassId(null);
-    // Reset all fields.
     setNewMemberFullName('');
     setNewMemberResidence('');
     setNewMemberPrayerCell('');
@@ -134,7 +140,6 @@ const AdminDashboard = () => {
   };
 
   const handleAddMember = async () => {
-    // Validate required fields.
     if (
       !newMemberFullName.trim() ||
       !newMemberResidence.trim() ||
@@ -144,6 +149,20 @@ const AdminDashboard = () => {
       setModalError('Please fill out all required fields.');
       return;
     }
+    // Duplicate check using email as unique identifier.
+    const selectedClass = classesData.find((cls) => cls.id === selectedClassId);
+    if (
+      selectedClass &&
+      selectedClass.members &&
+      selectedClass.members.some(
+        (member) =>
+          member.email.toLowerCase() === newMemberEmail.trim().toLowerCase()
+      )
+    ) {
+      setModalError('Member already exists in this class.');
+      return;
+    }
+
     const newMember = {
       fullName: newMemberFullName.trim(),
       residence: newMemberResidence.trim(),
@@ -152,16 +171,18 @@ const AdminDashboard = () => {
       email: newMemberEmail.trim(),
       membership: newMemberMembership,
       baptized: newMemberBaptized,
-      attendance: [], // Initialize empty; attendance marked later.
+      attendance: [],
     };
 
     try {
       await addMemberToClass(selectedClassId, newMember);
+      setSnackbarMessage('Member added successfully!');
+      setSnackbarOpen(true);
       await fetchClasses();
       handleCloseAddMemberModal();
     } catch (error) {
-      setModalError('Error adding member, please try again.');
       console.error(error);
+      setModalError('Error adding member, please try again.');
     }
   };
 
@@ -186,18 +207,31 @@ const AdminDashboard = () => {
     const newClassData = {
       name: newClassName.trim(),
       teacher: newClassTeacher.trim(),
-      elder: newClassElder.trim() || '', // Optional
-      classType: 'Church Service', // Fixed value; update if needed.
+      elder: newClassElder.trim() || '',
+      classType: 'Church Service',
       members: [],
     };
     try {
       await addNewClass(newClassData);
+      setSnackbarMessage('Class added successfully!');
+      setSnackbarOpen(true);
       await fetchClasses();
       handleCloseAddClassModal();
     } catch (error) {
       setClassModalError('Error creating class, please try again.');
       console.error(error);
     }
+  };
+
+  // ---------- Attendance Modal Functions (for Admin) ----------
+  const handleOpenAttendanceModal = (cls) => {
+    setSelectedAttendanceClass(cls);
+    setOpenAttendanceModal(true);
+  };
+
+  const handleCloseAttendanceModal = () => {
+    setOpenAttendanceModal(false);
+    setSelectedAttendanceClass(null);
   };
 
   return (
@@ -207,7 +241,12 @@ const AdminDashboard = () => {
       </Typography>
 
       {/* Button to Add New Class */}
-      <Button variant="contained" color="primary" onClick={handleOpenAddClassModal} sx={{ mb: 2 }}>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleOpenAddClassModal}
+        sx={{ mb: 2 }}
+      >
         Add New Class
       </Button>
 
@@ -290,7 +329,9 @@ const AdminDashboard = () => {
                   <TableCell>{cls.classType}</TableCell>
                   <TableCell>{totalMembers}</TableCell>
                   <TableCell>
-                    {cls.members ? cls.members.map((member) => member.fullName).join(', ') : 'No members'}
+                    {cls.members
+                      ? cls.members.map((member) => member.fullName).join(', ')
+                      : 'No members'}
                   </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
@@ -302,8 +343,19 @@ const AdminDashboard = () => {
                         e.stopPropagation();
                         handleOpenAddMemberModal(cls.id);
                       }}
+                      sx={{ mb: 1 }}
                     >
                       Add Member
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAttendanceModal(cls);
+                      }}
+                    >
+                      Mark Attendance
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -336,7 +388,6 @@ const AdminDashboard = () => {
           <Typography id="add-member-modal-title" variant="h6" component="h2">
             Add New Member
           </Typography>
-          {/* Full Name */}
           <TextField
             label="Full Name"
             value={newMemberFullName}
@@ -345,7 +396,6 @@ const AdminDashboard = () => {
             required
             sx={{ mt: 2 }}
           />
-          {/* Residence */}
           <TextField
             label="Residence"
             value={newMemberResidence}
@@ -354,7 +404,6 @@ const AdminDashboard = () => {
             required
             sx={{ mt: 2 }}
           />
-          {/* Prayer Cell */}
           <TextField
             label="Prayer Cell"
             value={newMemberPrayerCell}
@@ -362,7 +411,6 @@ const AdminDashboard = () => {
             fullWidth
             sx={{ mt: 2 }}
           />
-          {/* Phone Number */}
           <TextField
             label="Phone Number"
             value={newMemberPhone}
@@ -371,7 +419,6 @@ const AdminDashboard = () => {
             required
             sx={{ mt: 2 }}
           />
-          {/* Email Address */}
           <TextField
             label="Email Address"
             value={newMemberEmail}
@@ -380,7 +427,6 @@ const AdminDashboard = () => {
             required
             sx={{ mt: 2 }}
           />
-          {/* Membership */}
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Membership</InputLabel>
             <Select
@@ -392,7 +438,6 @@ const AdminDashboard = () => {
               <MenuItem value="Visitor">Visitor</MenuItem>
             </Select>
           </FormControl>
-          {/* Baptized Status */}
           <FormControl component="fieldset" sx={{ mt: 2 }}>
             <FormLabel component="legend">Baptized</FormLabel>
             <RadioGroup
@@ -400,16 +445,8 @@ const AdminDashboard = () => {
               value={newMemberBaptized}
               onChange={(e) => setNewMemberBaptized(e.target.value)}
             >
-              <FormControlLabel
-                value="Baptized"
-                control={<Radio />}
-                label="Baptized"
-              />
-              <FormControlLabel
-                value="Not Baptized"
-                control={<Radio />}
-                label="Not Baptized"
-              />
+              <FormControlLabel value="Baptized" control={<Radio />} label="Baptized" />
+              <FormControlLabel value="Not Baptized" control={<Radio />} label="Not Baptized" />
             </RadioGroup>
           </FormControl>
           {modalError && (
@@ -479,6 +516,49 @@ const AdminDashboard = () => {
           </Button>
         </Box>
       </Modal>
+
+      {/* Modal for Marking Attendance (for Admin) */}
+      <Modal
+        open={openAttendanceModal}
+        onClose={handleCloseAttendanceModal}
+        aria-labelledby="attendance-modal-title"
+        aria-describedby="attendance-modal-description"
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 500,
+            maxHeight: '80vh',
+            bgcolor: 'background.paper',
+            border: '2px solid #000',
+            boxShadow: 24,
+            p: 4,
+            overflowY: 'auto',
+          }}
+        >
+          {selectedAttendanceClass && (
+            <MarkSaturdayAttendance
+              classData={selectedAttendanceClass}
+              onAttendanceMarked={() => {
+                fetchClasses();
+                handleCloseAttendanceModal();
+              }}
+            />
+          )}
+        </Box>
+      </Modal>
+
+      {/* Snackbar for Confirmation Messages */}
+      <Snackbar
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+      />
     </div>
   );
 };
