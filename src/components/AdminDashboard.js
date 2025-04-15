@@ -23,7 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-// Sample data for classes (you might replace this with a Firestore collection when ready)
+// Sample data for classes (you might replace this with Firestore data later)
 const sampleData = [
   {
     id: 'bethlehem',
@@ -39,7 +39,7 @@ const sampleData = [
   },
   {
     id: 'judea',
-    name: 'Judea',
+    name: 'Judea Class',
     teacher: 'Teacher Judea',
     elder: 'Elder Judea',
     classType: 'Church Service',
@@ -48,61 +48,7 @@ const sampleData = [
       { fullName: 'Eve', attendance: [false, true, true, false] },
     ],
   },
-  {
-    id: 'galilee',
-    name: 'Galilee',
-    teacher: 'Teacher Galilee',
-    elder: 'Elder Galilee',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Frank', attendance: [true, false, false, false] },
-      { fullName: 'Grace', attendance: [true, true, true, false] },
-    ],
-  },
-  {
-    id: 'samaria',
-    name: 'Samaria',
-    teacher: 'Teacher Samaria',
-    elder: 'Elder Samaria',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Hank', attendance: [false, true, true, false] },
-      { fullName: 'Ivy', attendance: [true, true, false, true] },
-    ],
-  },
-  {
-    id: 'nazareth',
-    name: 'Nazareth',
-    teacher: 'Teacher Nazareth',
-    elder: 'Elder Nazareth',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Jack', attendance: [true, false, true, true] },
-      { fullName: 'Karen', attendance: [true, true, false, false] },
-    ],
-  },
-  {
-    id: 'baptismal',
-    name: 'Baptismal',
-    teacher: 'Teacher Baptismal',
-    elder: 'Elder Baptismal',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Leo', attendance: [true, true, true, false] },
-      { fullName: 'Mia', attendance: [false, false, true, true] },
-    ],
-  },
-  {
-    id: 'jerusalem',
-    name: 'Jerusalem',
-    teacher: 'Teacher Jerusalem',
-    elder: 'Elder Jerusalem',
-    classType: 'Church Service',
-    members: [
-      { fullName: 'Noah', attendance: [true, true, true, true] },
-      { fullName: 'Olivia', attendance: [true, false, true, false] },
-    ],
-  },
+  // ... Additional classes as needed
 ];
 
 const calculateClassAttendanceSummary = (classData) => {
@@ -110,13 +56,14 @@ const calculateClassAttendanceSummary = (classData) => {
   const totalMembers = members.length;
   const totalLessons = members[0] ? members[0].attendance.length : 0;
   let totalAttendances = 0;
-  members.forEach(member => {
-    totalAttendances += member.attendance.filter(x => x).length;
+  members.forEach((member) => {
+    totalAttendances += member.attendance.filter((x) => x).length;
   });
   const possibleAttendances = totalMembers * totalLessons;
-  const attendanceRate = possibleAttendances > 0
-    ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
-    : 'N/A';
+  const attendanceRate =
+    possibleAttendances > 0
+      ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
+      : 'N/A';
   return { totalMembers, totalLessons, totalAttendances, attendanceRate };
 };
 
@@ -128,7 +75,7 @@ const AdminDashboard = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Classes state – using static sampleData; later replace with dynamic Firestore data.
+  // Classes state — using static sampleData; later replace with dynamic Firestore data.
   const [classesData, setClassesData] = useState(sampleData);
 
   // State for User Role Management.
@@ -168,7 +115,7 @@ const AdminDashboard = () => {
   };
 
   // Filter classes based on class type (and date filters as needed)
-  const filteredData = classesData.filter(cls => {
+  const filteredData = classesData.filter((cls) => {
     if (filterClassType === 'All') return true;
     return cls.classType === filterClassType;
   });
@@ -176,15 +123,17 @@ const AdminDashboard = () => {
   let aggregatedMembers = 0;
   let aggregatedAttendances = 0;
   let aggregatedPossible = 0;
-  filteredData.forEach(cls => {
-    const { totalMembers, totalLessons, totalAttendances } = calculateClassAttendanceSummary(cls);
+  filteredData.forEach((cls) => {
+    const { totalMembers, totalLessons, totalAttendances } =
+      calculateClassAttendanceSummary(cls);
     aggregatedMembers += totalMembers;
     aggregatedAttendances += totalAttendances;
     aggregatedPossible += totalMembers * totalLessons;
   });
-  const overallAttendanceRate = aggregatedPossible > 0
-    ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
-    : 'N/A';
+  const overallAttendanceRate =
+    aggregatedPossible > 0
+      ? ((aggregatedAttendances / aggregatedPossible) * 100).toFixed(2)
+      : 'N/A';
 
   return (
     <div style={{ padding: '20px' }}>
@@ -273,6 +222,7 @@ const AdminDashboard = () => {
               <TableCell>Elder</TableCell>
               <TableCell>Class Type</TableCell>
               <TableCell>Total Members</TableCell>
+              <TableCell>Members</TableCell>
               <TableCell>Total Lessons</TableCell>
               <TableCell>Total Attendances</TableCell>
               <TableCell>Attendance Rate (%)</TableCell>
@@ -293,7 +243,12 @@ const AdminDashboard = () => {
                   <TableCell>{cls.teacher}</TableCell>
                   <TableCell>{cls.elder}</TableCell>
                   <TableCell>{cls.classType}</TableCell>
+                  {/* Show member count */}
                   <TableCell>{totalMembers}</TableCell>
+                  {/* Show all member names (comma-separated) */}
+                  <TableCell>
+                    {cls.members.map((member) => member.fullName).join(', ')}
+                  </TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{totalAttendances}</TableCell>
                   <TableCell>{attendanceRate}%</TableCell>
