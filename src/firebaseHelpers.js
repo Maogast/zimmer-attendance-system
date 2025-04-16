@@ -10,6 +10,8 @@ import {
   setDoc,
   getDocs,
   serverTimestamp,
+  query,
+  where,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -99,4 +101,82 @@ export const getAttendanceRecordsForClass = async (classId) => {
     console.error('Error getting attendance records:', error);
     throw error;
   }
+};
+
+// --------------------------
+// New Functions for Enhanced Usage
+// --------------------------
+
+// 1. Update Attendance Record:
+// Allows updating a previously submitted attendance record.
+export const updateAttendanceRecordForClass = async (classId, recordId, updatedData) => {
+  try {
+    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
+    await updateDoc(attendanceDocRef, updatedData);
+    console.log('Attendance record updated successfully!');
+  } catch (error) {
+    console.error('Error updating attendance record:', error);
+    throw error;
+  }
+};
+
+// 2. Delete Attendance Record:
+// Allows deleting a specific attendance record.
+export const deleteAttendanceRecordForClass = async (classId, recordId) => {
+  try {
+    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
+    await deleteDoc(attendanceDocRef);
+    console.log('Attendance record deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting attendance record:', error);
+    throw error;
+  }
+};
+
+// 3. Get Attendance Records by Date Range:
+// Retrieves attendance records within a specific date range.
+// Note: startDate and endDate should be Date objects.
+export const getAttendanceRecordsForClassByDate = async (classId, startDate, endDate) => {
+  try {
+    const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
+    const q = query(
+      attendanceRecordsCollectionRef,
+      where('timestamp', '>=', startDate),
+      where('timestamp', '<=', endDate)
+    );
+    const recordsSnapshot = await getDocs(q);
+    const records = recordsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    return records;
+  } catch (error) {
+    console.error('Error getting filtered attendance records:', error);
+    throw error;
+  }
+};
+
+// 4. Calculate Member Analytics:
+// Aggregates attendance records to compute total sessions, attendance count, and rate for a given member.
+// memberIdentifier should uniquely identify a member (for example, their email).
+export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) => {
+  let totalSessions = 0;
+  let attendedSessions = 0;
+  
+  attendanceRecords.forEach(record => {
+    record.members?.forEach(member => {
+      if (member.email && member.email.toLowerCase() === memberIdentifier.toLowerCase()) {
+        const sessions = member.attendance ? member.attendance.length : 0;
+        const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;
+        totalSessions += sessions;
+        attendedSessions += attended;
+      }
+    });
+  });
+  
+  return {
+    totalSessions,
+    attendedSessions,
+    rate: totalSessions > 0 ? ((attendedSessions / totalSessions) * 100).toFixed(2) : "N/A"
+  };
 };
