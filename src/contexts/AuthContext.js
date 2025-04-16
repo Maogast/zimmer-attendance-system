@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
         if (userSnap.exists()) {
           setUserRole(userSnap.data().role);
         } else {
-          // Default role is now "teacher" instead of "student"
+          // Default role is "teacher" if no document exists.
           setUserRole("teacher");
         }
       } else {

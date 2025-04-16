@@ -12,19 +12,13 @@ import {
   serverTimestamp,
   query,
   where,
+  getDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
-// Function to add a new member to a class document.
-export const addMemberToClass = async (classId, newMember) => {
-  try {
-    const classRef = doc(db, 'classes', classId);
-    await updateDoc(classRef, { members: arrayUnion(newMember) });
-    console.log('Member added successfully!');
-  } catch (error) {
-    console.error('Error updating members:', error);
-  }
-};
+// -----------------------------
+// CLASS MANAGEMENT FUNCTIONS
+// -----------------------------
 
 // Function to add a new class document to the "classes" collection.
 export const addNewClass = async (classData) => {
@@ -49,6 +43,33 @@ export const updateClass = async (classId, updatedClassData) => {
   }
 };
 
+// Function to delete an entire class document.
+export const deleteClass = async (classId) => {
+  try {
+    await deleteDoc(doc(db, 'classes', classId));
+    console.log('Class deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting class:', error);
+    throw error;
+  }
+};
+
+// -----------------------------
+// MEMBER MANAGEMENT FUNCTIONS
+// -----------------------------
+
+// Function to add a new member to a class document.
+export const addMemberToClass = async (classId, newMember) => {
+  try {
+    const classRef = doc(db, 'classes', classId);
+    await updateDoc(classRef, { members: arrayUnion(newMember) });
+    console.log('Member added successfully!');
+  } catch (error) {
+    console.error('Error updating members:', error);
+    throw error;
+  }
+};
+
 // Function to delete a member from a class document.
 export const deleteMemberFromClass = async (classId, member) => {
   try {
@@ -61,16 +82,9 @@ export const deleteMemberFromClass = async (classId, member) => {
   }
 };
 
-// Function to delete an entire class document.
-export const deleteClass = async (classId) => {
-  try {
-    await deleteDoc(doc(db, 'classes', classId));
-    console.log('Class deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting class:', error);
-    throw error;
-  }
-};
+// -----------------------------
+// ATTENDANCE FUNCTIONS
+// -----------------------------
 
 // Function to submit attendance data.
 // Writes the attendance record to the attendanceRecords subcollection.
@@ -103,12 +117,11 @@ export const getAttendanceRecordsForClass = async (classId) => {
   }
 };
 
-// --------------------------
-// New Functions for Enhanced Usage
-// --------------------------
+// -----------------------------
+// ENHANCED ATTENDANCE FUNCTIONS
+// -----------------------------
 
-// 1. Update Attendance Record:
-// Allows updating a previously submitted attendance record.
+// 1. Update Attendance Record: Allows updating a previously submitted attendance record.
 export const updateAttendanceRecordForClass = async (classId, recordId, updatedData) => {
   try {
     const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
@@ -120,8 +133,7 @@ export const updateAttendanceRecordForClass = async (classId, recordId, updatedD
   }
 };
 
-// 2. Delete Attendance Record:
-// Allows deleting a specific attendance record.
+// 2. Delete Attendance Record: Allows deleting a specific attendance record.
 export const deleteAttendanceRecordForClass = async (classId, recordId) => {
   try {
     const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
@@ -133,8 +145,7 @@ export const deleteAttendanceRecordForClass = async (classId, recordId) => {
   }
 };
 
-// 3. Get Attendance Records by Date Range:
-// Retrieves attendance records within a specific date range.
+// 3. Get Attendance Records by Date Range: Retrieves attendance records within a specific date range.
 // Note: startDate and endDate should be Date objects.
 export const getAttendanceRecordsForClassByDate = async (classId, startDate, endDate) => {
   try {
@@ -156,8 +167,7 @@ export const getAttendanceRecordsForClassByDate = async (classId, startDate, end
   }
 };
 
-// 4. Calculate Member Analytics:
-// Aggregates attendance records to compute total sessions, attendance count, and rate for a given member.
+// 4. Calculate Member Analytics: Aggregates attendance records to compute total sessions, attendance count, and rate for a given member.
 // memberIdentifier should uniquely identify a member (for example, their email).
 export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) => {
   let totalSessions = 0;
@@ -179,4 +189,30 @@ export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) =>
     attendedSessions,
     rate: totalSessions > 0 ? ((attendedSessions / totalSessions) * 100).toFixed(2) : "N/A"
   };
+};
+
+// -----------------------------
+// TEACHER LOGGING FUNCTION
+// -----------------------------
+
+/**
+ * Logs a teacher action in Firestore.
+ * @param {string} teacherId - UID of the teacher.
+ * @param {string} teacherEmail - Email of the teacher.
+ * @param {string} action - Description of the action (e.g., "SUBMIT_ATTENDANCE", "ADD_MEMBER", "TOGGLE_ATTENDANCE").
+ * @param {Object} details - Optional additional details about the action.
+ */
+export const logTeacherAction = async (teacherId, teacherEmail, action, details = {}) => {
+  try {
+    await addDoc(collection(db, "logs"), {
+      teacherId,
+      teacherEmail,
+      action,
+      details,
+      timestamp: serverTimestamp(),
+    });
+    console.log("Logged teacher action:", action);
+  } catch (error) {
+    console.error("Error logging teacher action:", error);
+  }
 };
