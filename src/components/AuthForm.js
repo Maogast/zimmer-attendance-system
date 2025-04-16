@@ -20,7 +20,7 @@ const AuthForm = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  // Additional state for password reset messages
+  // Additional state for password reset messages.
   const [resetMessage, setResetMessage] = useState('');
 
   // List of admin emails; if a new user’s email matches one of these, they get the "admin" role.
@@ -39,14 +39,14 @@ const AuthForm = () => {
         // Retrieve the user role from Firestore.
         const userDocRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userDocRef);
-        const userRole = userSnap.exists() ? userSnap.data().role : "student";
+        // If no document exists assume default role is "teacher"
+        const userRole = userSnap.exists() ? userSnap.data().role : "teacher";
         // Redirect based on role.
         if (userRole === "admin") {
           navigate("/admin");
         } else if (userRole === "teacher") {
           navigate("/teacher");
         } else {
-          // For general users or students
           navigate("/");
         }
       }
@@ -77,10 +77,12 @@ const AuthForm = () => {
         // Send email verification.
         await sendEmailVerification(user);
         alert("Verification email sent. Please verify your email before logging in.");
-        // Determine the role based on the admin email list.
+
+        // Determine the role: if the email is in adminEmails, assign "admin"; otherwise assign "teacher".
         const userRole = adminEmails.some(
           (adminEmail) => adminEmail.toLowerCase() === email.toLowerCase()
-        ) ? "admin" : "student";
+        ) ? "admin" : "teacher";
+
         // Create a Firestore user document.
         await setDoc(doc(db, 'users', user.uid), {
           email,
@@ -112,7 +114,7 @@ const AuthForm = () => {
         // New Google user: determine role based on the admin email list.
         const userRole = adminEmails.some(
           (adminEmail) => adminEmail.toLowerCase() === user.email.toLowerCase()
-        ) ? "admin" : "student";
+        ) ? "admin" : "teacher";
         await setDoc(userDocRef, {
           email: user.email,
           role: userRole,
@@ -178,7 +180,7 @@ const AuthForm = () => {
       {/* Forgot Password Link for Login Mode */}
       {isLogin && (
         <p style={{ marginTop: '10px' }}>
-          <button
+          <button 
             onClick={handleForgotPassword}
             style={{
               background: 'none',
