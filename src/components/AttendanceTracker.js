@@ -1,233 +1,6 @@
-import { logTeacherAction } from '../firebaseHelpers';
 // src/components/AttendanceTracker.js
-// src/firebaseHelpers.js
-import { logTeacherAction } from '../firebaseHelpers';
-await submitAttendanceForClass(classId, attendanceData);
-await logTeacherAction(
-  currentUser.uid,
-  currentUser.email,
-  "SUBMIT_ATTENDANCE",
-  { classId, recordId: attendanceData.recordId }
-);
-import {
-  doc,
-  updateDoc,
-  arrayUnion,
-  arrayRemove,
-  collection,
-  addDoc,
-  deleteDoc,
-  setDoc,
-  getDocs,
-  serverTimestamp,
-  query,
-  where,
-  getDoc,
-} from 'firebase/firestore';
-import { db } from './firebase';
-
-// -----------------------------
-// CLASS MANAGEMENT FUNCTIONS
-// -----------------------------
-
-// Function to add a new class document to the "classes" collection.
-export const addNewClass = async (classData) => {
-  try {
-    const docRef = await addDoc(collection(db, 'classes'), classData);
-    console.log('Class created with ID:', docRef.id);
-  } catch (error) {
-    console.error('Error adding class:', error);
-    throw error;
-  }
-};
-
-// Function to update an existing class document.
-export const updateClass = async (classId, updatedClassData) => {
-  try {
-    const classRef = doc(db, 'classes', classId);
-    await updateDoc(classRef, updatedClassData);
-    console.log('Class updated successfully!');
-  } catch (error) {
-    console.error('Error updating class:', error);
-    throw error;
-  }
-};
-
-// Function to delete an entire class document.
-export const deleteClass = async (classId) => {
-  try {
-    await deleteDoc(doc(db, 'classes', classId));
-    console.log('Class deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting class:', error);
-    throw error;
-  }
-};
-
-// -----------------------------
-// MEMBER MANAGEMENT FUNCTIONS
-// -----------------------------
-
-// Function to add a new member to a class document.
-export const addMemberToClass = async (classId, newMember) => {
-  try {
-    const classRef = doc(db, 'classes', classId);
-    await updateDoc(classRef, { members: arrayUnion(newMember) });
-    console.log('Member added successfully!');
-  } catch (error) {
-    console.error('Error updating members:', error);
-    throw error;
-  }
-};
-
-// Function to delete a member from a class document.
-export const deleteMemberFromClass = async (classId, member) => {
-  try {
-    const classRef = doc(db, 'classes', classId);
-    await updateDoc(classRef, { members: arrayRemove(member) });
-    console.log('Member deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting member:', error);
-    throw error;
-  }
-};
-
-// -----------------------------
-// ATTENDANCE FUNCTIONS
-// -----------------------------
-
-// Function to submit attendance data.
-// Writes the attendance record to the attendanceRecords subcollection.
-export const submitAttendanceForClass = async (classId, attendanceData) => {
-  try {
-    const recordId = `${attendanceData.year}-${attendanceData.month}`; // e.g., "2025-4"
-    attendanceData.timestamp = serverTimestamp();
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
-    await setDoc(attendanceDocRef, attendanceData, { merge: true });
-    console.log('Attendance submitted successfully!');
-  } catch (error) {
-    console.error('Error submitting attendance:', error);
-    throw error;
-  }
-};
-
-// Function to retrieve attendance records for a class.
-export const getAttendanceRecordsForClass = async (classId) => {
-  try {
-    const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
-    const recordsSnapshot = await getDocs(attendanceRecordsCollectionRef);
-    const records = recordsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-    return records;
-  } catch (error) {
-    console.error('Error getting attendance records:', error);
-    throw error;
-  }
-};
-
-// -----------------------------
-// ENHANCED ATTENDANCE FUNCTIONS
-// -----------------------------
-
-// 1. Update Attendance Record: Allows updating a previously submitted attendance record.
-export const updateAttendanceRecordForClass = async (classId, recordId, updatedData) => {
-  try {
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
-    await updateDoc(attendanceDocRef, updatedData);
-    console.log('Attendance record updated successfully!');
-  } catch (error) {
-    console.error('Error updating attendance record:', error);
-    throw error;
-  }
-};
-
-// 2. Delete Attendance Record: Allows deleting a specific attendance record.
-export const deleteAttendanceRecordForClass = async (classId, recordId) => {
-  try {
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
-    await deleteDoc(attendanceDocRef);
-    console.log('Attendance record deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting attendance record:', error);
-    throw error;
-  }
-};
-
-// 3. Get Attendance Records by Date Range: Retrieves attendance records within a specific date range.
-// Note: startDate and endDate should be Date objects.
-export const getAttendanceRecordsForClassByDate = async (classId, startDate, endDate) => {
-  try {
-    const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
-    const q = query(
-      attendanceRecordsCollectionRef,
-      where('timestamp', '>=', startDate),
-      where('timestamp', '<=', endDate)
-    );
-    const recordsSnapshot = await getDocs(q);
-    const records = recordsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-    return records;
-  } catch (error) {
-    console.error('Error getting filtered attendance records:', error);
-    throw error;
-  }
-};
-
-// 4. Calculate Member Analytics: Aggregates attendance records to compute total sessions, attendance count, and rate for a given member.
-// memberIdentifier should uniquely identify a member (for example, their email).
-export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) => {
-  let totalSessions = 0;
-  let attendedSessions = 0;
-  
-  attendanceRecords.forEach(record => {
-    record.members?.forEach(member => {
-      if (member.email && member.email.toLowerCase() === memberIdentifier.toLowerCase()) {
-        const sessions = member.attendance ? member.attendance.length : 0;
-        const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;
-        totalSessions += sessions;
-        attendedSessions += attended;
-      }
-    });
-  });
-  
-  return {
-    totalSessions,
-    attendedSessions,
-    rate: totalSessions > 0 ? ((attendedSessions / totalSessions) * 100).toFixed(2) : "N/A"
-  };
-};
-
-// -----------------------------
-// TEACHER LOGGING FUNCTION
-// -----------------------------
-
-/**
- * Logs a teacher action in Firestore.
- * @param {string} teacherId - UID of the teacher.
- * @param {string} teacherEmail - Email of the teacher.
- * @param {string} action - Description of the action (e.g., "SUBMIT_ATTENDANCE", "ADD_MEMBER", "TOGGLE_ATTENDANCE").
- * @param {Object} details - Optional additional details about the action.
- */
-export const logTeacherAction = async (teacherId, teacherEmail, action, details = {}) => {
-  try {
-    await addDoc(collection(db, "logs"), {
-      teacherId,
-      teacherEmail,
-      action,
-      details,
-      timestamp: serverTimestamp(),
-    });
-    console.log("Logged teacher action:", action);
-  } catch (error) {
-    console.error("Error logging teacher action:", error);
-  }
-};
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   TextField,
   Button,
@@ -250,37 +23,53 @@ import {
   Alert,
 } from '@mui/material';
 import { format } from 'date-fns';
+import {
+  doc,
+  getDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import {
+  submitAttendanceForClass,
+  addMemberToClass,
+  logTeacherAction,
+} from '../firebaseHelpers';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { submitAttendanceForClass, addMemberToClass } from '../firebaseHelpers';
 
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // Persistent class data fetched from Firestore.
-  const [classData, setClassData] = useState({
+  // ---------------------------
+  // Authentication State
+  // ---------------------------
+  const [currentUser, setCurrentUser] = useState(null);
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
+    });
+    return unsubscribe;
+  }, []);
+  // ---------------------------
+  // Class & Attendance State
+  // ---------------------------
+  const [ setClassData] = useState({
     name: '',
     teacher: '',
     elder: '',
     members: [],
   });
   const [loading, setLoading] = useState(true);
-
-  // Editable header fields (initialized from Firestore).
   const [className, setClassName] = useState('');
   const [teacher, setTeacher] = useState('');
   const [elder, setElder] = useState('');
-
-  // Attendance session settings.
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
-
-  // Local working list of members and their attendance.
   const [members, setMembers] = useState([]);
 
-  // New member form state.
+  // ---------------------------
+  // New Member Form State (extended fields)
+  // ---------------------------
   const [newMember, setNewMember] = useState({
     fullName: '',
     residence: '',
@@ -291,13 +80,17 @@ const AttendanceTracker = () => {
     baptized: false,
   });
 
-  // State for handling submission and notifications.
+  // ---------------------------
+  // Submission and Notification State
+  // ---------------------------
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // or "error"
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // "success" or "error"
 
-  // Fetch persistent class details from Firestore.
+  // ---------------------------
+  // Fetch Class Data from Firestore
+  // ---------------------------
   useEffect(() => {
     const fetchClassData = async () => {
       try {
@@ -317,9 +110,9 @@ const AttendanceTracker = () => {
           setMembers(data.members || []);
         }
       } catch (error) {
-        console.error("Error fetching class data:", error);
-        setSnackbarMessage("Error fetching class data");
-        setSnackbarSeverity("error");
+        console.error('Error fetching class data:', error);
+        setSnackbarMessage('Error fetching class data');
+        setSnackbarSeverity('error');
         setSnackbarOpen(true);
       } finally {
         setLoading(false);
@@ -329,17 +122,20 @@ const AttendanceTracker = () => {
     fetchClassData();
   }, [classId]);
 
-  // Compute Saturdays for the selected month and year.
+  // ---------------------------
+  // Compute Saturdays for Selected Month/Year
+  // ---------------------------
   useEffect(() => {
     setSaturdays(getSaturdaysOfMonth(year, month));
   }, [month, year]);
 
-  // Handle changes in the new member form.
+  // ---------------------------
+  // New Member Form Handlers
+  // ---------------------------
   const handleNewMemberChange = (field, value) => {
     setNewMember((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Add a new member persistently via addMemberToClass.
   const handleAddMember = async () => {
     if (
       !newMember.fullName.trim() ||
@@ -352,6 +148,7 @@ const AttendanceTracker = () => {
       setSnackbarOpen(true);
       return;
     }
+
     const newMemberData = {
       fullName: newMember.fullName.trim(),
       residence: newMember.residence.trim(),
@@ -365,7 +162,7 @@ const AttendanceTracker = () => {
 
     try {
       await addMemberToClass(classId, newMemberData);
-      // Re-fetch class data to update the local member list.
+      // Refresh class data after adding member.
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
@@ -381,7 +178,7 @@ const AttendanceTracker = () => {
         setSnackbarSeverity("success");
         setSnackbarOpen(true);
       }
-      // Clear the new member form.
+      // Clear new member form.
       setNewMember({
         fullName: '',
         residence: '',
@@ -399,10 +196,12 @@ const AttendanceTracker = () => {
     }
   };
 
-  // Toggle attendance status for a member at a specified Saturday.
+  // ---------------------------
+  // Toggle Attendance Status for a Member on a Specific Saturday
+  // ---------------------------
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
-    // Extend attendance array if necessary.
+    // Ensure the attendance array covers all saturdays.
     if (updatedMembers[memberIndex].attendance.length < saturdays.length) {
       const diff = saturdays.length - updatedMembers[memberIndex].attendance.length;
       updatedMembers[memberIndex].attendance = [
@@ -414,7 +213,9 @@ const AttendanceTracker = () => {
     setMembers(updatedMembers);
   };
 
-  // Export the current attendance snapshot to a CSV file.
+  // ---------------------------
+  // Export Attendance Data to CSV
+  // ---------------------------
   const exportAttendanceToCSV = () => {
     const header = [
       'No.',
@@ -439,7 +240,9 @@ const AttendanceTracker = () => {
       ...member.attendance.map((present) => (present ? 'P' : 'A')),
     ]);
     const csvContent = [header, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+      )
       .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -452,22 +255,33 @@ const AttendanceTracker = () => {
     document.body.removeChild(link);
   };
 
-  // Submit the attendance snapshot to Firestore.
+  // ---------------------------
+  // Submit Attendance Event Handler
+  // ---------------------------
   const handleSubmitAttendance = async () => {
     setSubmittingAttendance(true);
     const attendanceData = {
-      recordId: `${year}-${month}`, // e.g., "2025-4"
+      recordId: `${year}-${month}`, // e.g. "2025-4"
       className,
       teacher,
       elder,
       month,
       year,
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      members, // Snapshot of the current working attendance.
+      members, // Snapshot of current attendance.
+      timestamp: serverTimestamp(),
     };
 
     try {
       await submitAttendanceForClass(classId, attendanceData);
+      if (currentUser) {
+        await logTeacherAction(
+          currentUser.uid,
+          currentUser.email,
+          "SUBMIT_ATTENDANCE",
+          { classId, recordId: attendanceData.recordId }
+        );
+      }
       setSnackbarMessage("Attendance submitted successfully!");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
@@ -487,22 +301,49 @@ const AttendanceTracker = () => {
 
   return (
     <div style={{ padding: '20px', overflowX: 'auto' }}>
-      {/* Header Form: Editable session settings */}
+      {/* Editable Header Form */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
-          <TextField label="Class Name" value={className} onChange={(e) => setClassName(e.target.value)} fullWidth />
+          <TextField 
+            label="Class Name" 
+            value={className} 
+            onChange={(e) => setClassName(e.target.value)} 
+            fullWidth 
+          />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField label="Teacher(s)" value={teacher} onChange={(e) => setTeacher(e.target.value)} fullWidth />
+          <TextField 
+            label="Teacher(s)" 
+            value={teacher} 
+            onChange={(e) => setTeacher(e.target.value)} 
+            fullWidth 
+          />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField label="Elder Attached" value={elder} onChange={(e) => setElder(e.target.value)} fullWidth />
+          <TextField 
+            label="Elder Attached" 
+            value={elder} 
+            onChange={(e) => setElder(e.target.value)} 
+            fullWidth 
+          />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField label="Month (0-11)" type="number" value={month} onChange={(e) => setMonth(parseInt(e.target.value))} fullWidth />
+          <TextField 
+            label="Month (0-11)" 
+            type="number"
+            value={month} 
+            onChange={(e) => setMonth(parseInt(e.target.value))} 
+            fullWidth 
+          />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField label="Year" type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} fullWidth />
+          <TextField 
+            label="Year" 
+            type="number"
+            value={year} 
+            onChange={(e) => setYear(parseInt(e.target.value))} 
+            fullWidth 
+          />
         </Grid>
       </Grid>
 
@@ -541,27 +382,55 @@ const AttendanceTracker = () => {
                 <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
                 {member.attendance.map((present, satIndex) => (
                   <TableCell key={satIndex}>
-                    <Checkbox checked={present} onChange={() => toggleAttendance(index, satIndex)} />
+                    <Checkbox 
+                      checked={present} 
+                      onChange={() => toggleAttendance(index, satIndex)} 
+                    />
                   </TableCell>
                 ))}
               </TableRow>
             ))}
-            {/* Row for Adding a New Member */}
+            {/* New Member Entry Row */}
             <TableRow>
               <TableCell>
-                <TextField placeholder="Full Name" value={newMember.fullName} onChange={(e) => handleNewMemberChange('fullName', e.target.value)} fullWidth />
+                <TextField 
+                  placeholder="Full Name" 
+                  value={newMember.fullName} 
+                  onChange={(e) => handleNewMemberChange('fullName', e.target.value)} 
+                  fullWidth 
+                />
               </TableCell>
               <TableCell>
-                <TextField placeholder="Residence" value={newMember.residence} onChange={(e) => handleNewMemberChange('residence', e.target.value)} fullWidth />
+                <TextField 
+                  placeholder="Residence" 
+                  value={newMember.residence} 
+                  onChange={(e) => handleNewMemberChange('residence', e.target.value)} 
+                  fullWidth 
+                />
               </TableCell>
               <TableCell>
-                <TextField placeholder="Prayer Cell" value={newMember.prayerCell} onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)} fullWidth />
+                <TextField 
+                  placeholder="Prayer Cell" 
+                  value={newMember.prayerCell} 
+                  onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)} 
+                  fullWidth 
+                />
               </TableCell>
               <TableCell>
-                <TextField placeholder="Phone" value={newMember.phoneNumber} onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)} fullWidth />
+                <TextField 
+                  placeholder="Phone" 
+                  value={newMember.phoneNumber} 
+                  onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)} 
+                  fullWidth 
+                />
               </TableCell>
               <TableCell>
-                <TextField placeholder="Email" value={newMember.email} onChange={(e) => handleNewMemberChange('email', e.target.value)} fullWidth />
+                <TextField 
+                  placeholder="Email" 
+                  value={newMember.email} 
+                  onChange={(e) => handleNewMemberChange('email', e.target.value)} 
+                  fullWidth 
+                />
               </TableCell>
               <TableCell>
                 <FormControl fullWidth>
@@ -578,7 +447,12 @@ const AttendanceTracker = () => {
               </TableCell>
               <TableCell>
                 <FormControlLabel
-                  control={<Checkbox checked={newMember.baptized} onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} />}
+                  control={
+                    <Checkbox 
+                      checked={newMember.baptized} 
+                      onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} 
+                    />
+                  }
                   label="Baptized"
                 />
               </TableCell>
@@ -606,7 +480,7 @@ const AttendanceTracker = () => {
         </Grid>
       </Grid>
 
-      {/* Snackbar for notifications */}
+      {/* Snackbar Notifications */}
       <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={() => setSnackbarOpen(false)}>
         <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage}

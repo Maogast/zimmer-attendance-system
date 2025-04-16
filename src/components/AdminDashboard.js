@@ -1,10 +1,7 @@
 // src/components/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
-  CardContent,
   Typography,
-  Grid,
   Table,
   TableBody,
   TableCell,
@@ -30,7 +27,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  IconButton,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -42,7 +38,6 @@ import {
   updateClass,
   deleteClass,
   addMemberToClass,
-  deleteMemberFromClass,
 } from '../firebaseHelpers';
 
 // A helper to compute some summary statistics for each class.
