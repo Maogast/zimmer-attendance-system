@@ -29,7 +29,7 @@ import { submitAttendanceForClass, addMemberToClass } from '../firebaseHelpers';
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // Persistent class fields fetched from Firestore.
+  // Persistent class data from Firestore.
   const [classDetails, setClassDetails] = useState({
     name: '',
     teacher: '',
@@ -38,17 +38,17 @@ const AttendanceTracker = () => {
   });
   const [loadingClass, setLoadingClass] = useState(true);
 
-  // Local header fields (editable).
+  // Local (editable) header fields.
   const [className, setClassName] = useState('');
   const [teacher, setTeacher] = useState('');
   const [elder, setElder] = useState('');
 
-  // Attendance session details.
+  // Session details.
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
 
-  // Local working members list used to mark attendance.
+  // Working members list (local state used for marking attendance).
   const [members, setMembers] = useState([]);
 
   // New member form state.
@@ -62,7 +62,7 @@ const AttendanceTracker = () => {
     baptized: false
   });
 
-  // Fetch persistent class document on mount.
+  // Fetch the persistent class document with current members.
   useEffect(() => {
     const fetchClassData = async () => {
       try {
@@ -83,7 +83,7 @@ const AttendanceTracker = () => {
           setMembers(persistentMembers);
         }
       } catch (error) {
-        console.error("Error fetching class data", error);
+        console.error("Error fetching class data:", error);
       } finally {
         setLoadingClass(false);
       }
@@ -92,33 +92,33 @@ const AttendanceTracker = () => {
     fetchClassData();
   }, [classId]);
 
-  // Update saturdays when month/year changes.
+  // When the month or year changes, update the Saturday array.
   useEffect(() => {
     setSaturdays(getSaturdaysOfMonth(year, month));
   }, [month, year]);
 
-  // Handle new member form changes.
+  // Handle changes in the new member form.
   const handleNewMemberChange = (field, value) => {
     setNewMember({ ...newMember, [field]: value });
   };
 
-  // When adding a new member, update the persistent class via Firebase and then update local state.
+  // Add a new member. Use optional chaining/default if email or phone is missing to avoid errors.
   const handleAddMember = async () => {
     if (newMember.fullName.trim() === '') return;
-    const newEmail = newMember.email.trim().toLowerCase();
-    const newPhone = newMember.phoneNumber.trim();
+    const newEmail = (newMember.email || '').trim().toLowerCase();
+    const newPhone = (newMember.phoneNumber || '').trim();
 
-    // Check for duplicate members locally.
-    const duplicate = members.find(member =>
-      (newEmail && member.email.trim().toLowerCase() === newEmail) ||
-      (newPhone && member.phoneNumber.trim() === newPhone)
-    );
+    // Check for duplicates in the members array.
+    const duplicate = members.find(member => {
+      const memberEmail = (member.email || '').trim().toLowerCase();
+      const memberPhone = (member.phoneNumber || '').trim();
+      return (newEmail && memberEmail === newEmail) || (newPhone && memberPhone === newPhone);
+    });
     if (duplicate) {
       alert("A member with the same Email or Phone number already exists.");
       return;
     }
 
-    // Create member object with a fresh attendance array for this session.
     const memberToAdd = {
       ...newMember,
       attendance: new Array(saturdays.length).fill(false)
@@ -127,19 +127,19 @@ const AttendanceTracker = () => {
     try {
       // Update the persistent class document.
       await addMemberToClass(classId, memberToAdd);
-      // After update, re-fetch the class document to get the updated members.
+      // Re-fetch the class document to update our working list.
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         const data = classSnap.data();
-        const persistentMembers = data.members || [];
+        const updatedMembers = data.members || [];
         setClassDetails({
           name: data.name || '',
           teacher: data.teacher || '',
           elder: data.elder || '',
-          members: persistentMembers
+          members: updatedMembers
         });
-        setMembers(persistentMembers);
+        setMembers(updatedMembers);
       }
       // Clear new member form.
       setNewMember({
@@ -152,14 +152,14 @@ const AttendanceTracker = () => {
         baptized: false
       });
     } catch (error) {
-      console.error("Error adding new member", error);
+      console.error("Error adding new member:", error);
     }
   };
 
-  // Toggle attendance for a member on a given Saturday.
+  // Toggle attendance for a member at a specific Saturday.
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
-    // Ensure the attendance array is long enough.
+    // If attendance array is too short (in case we've added new Saturdays), extend it.
     if (updatedMembers[memberIndex].attendance.length < saturdays.length) {
       const diff = saturdays.length - updatedMembers[memberIndex].attendance.length;
       updatedMembers[memberIndex].attendance = [
@@ -171,7 +171,7 @@ const AttendanceTracker = () => {
     setMembers(updatedMembers);
   };
 
-  // CSV Export Feature.
+  // Export attendance data to CSV.
   const exportAttendanceToCSV = () => {
     const header = [
       'No.',
@@ -182,7 +182,7 @@ const AttendanceTracker = () => {
       'Email',
       'Membership Status',
       'Baptized?',
-      ...saturdays.map((sat) => format(sat, 'dd/MM'))
+      ...saturdays.map(sat => format(sat, 'dd/MM'))
     ];
     const rows = members.map((member, index) => [
       index + 1,
@@ -193,11 +193,12 @@ const AttendanceTracker = () => {
       member.email,
       member.membershipStatus,
       member.baptized ? 'Yes' : 'No',
-      ...member.attendance.map((present) => (present ? 'P' : 'A'))
+      ...member.attendance.map(present => (present ? 'P' : 'A'))
     ]);
     const csvContent = [header, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -208,7 +209,7 @@ const AttendanceTracker = () => {
     document.body.removeChild(link);
   };
 
-  // Submit Attendance Feature: Save a snapshot of the attendance data to Firestore.
+  // Submit the attendance snapshot to Firestore.
   const handleSubmitAttendance = async () => {
     const attendanceData = {
       recordId: `${year}-${month}`,
@@ -217,8 +218,8 @@ const AttendanceTracker = () => {
       elder,
       month,
       year,
-      saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      members // snapshot of current working attendance data
+      saturdays: saturdays.map(sat => format(sat, 'yyyy-MM-dd')),
+      members  // Save the working attendance snapshot along with persistent data.
     };
 
     try {
