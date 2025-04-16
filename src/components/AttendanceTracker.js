@@ -1,84 +1,39 @@
 // src/components/AttendanceTracker.js
 import React, { useState, useEffect } from 'react';
+import { Button, Typography, Box } from '@mui/material';
 import { useParams } from 'react-router-dom';
-import {
-  TextField,
-  Button,
-  Checkbox,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Typography,
-  Snackbar,
-  Alert,
-} from '@mui/material';
 import { format } from 'date-fns';
 import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase';
-import { submitAttendanceForClass, addMemberToClass, logTeacherAction } from '../firebaseHelpers';
+import { db, auth } from '../firebase';
+import { submitAttendanceForClass, logTeacherAction } from '../firebaseHelpers';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
+import { useAuth } from '../contexts/AuthContext';
 
 const AttendanceTracker = () => {
   const { classId } = useParams();
+  const { currentUser } = useAuth();
 
-  // ---------------------------
-  // Authentication State (for teacher logging)
-  // ---------------------------
-  const [currentUser, setCurrentUser] = useState(null);
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setCurrentUser(user);
-    });
-    return unsubscribe;
-  }, []);
-
-  // ---------------------------
-  // Class & Attendance State
-  // ---------------------------
-  const [loading, setLoading] = useState(true);
+  // Class attributes state.
   const [className, setClassName] = useState('');
-  const [teacher, setTeacher] = useState('');
-  const [elder, setElder] = useState('');
-  const [month, setMonth] = useState(new Date().getMonth());
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [saturdays, setSaturdays] = useState([]);
   const [members, setMembers] = useState([]);
 
-  // ---------------------------
-  // New Member Form State (Admin responsibility)
-  // ---------------------------
-  // For teacher view, the "Add Member" functionality should be hidden or removed.
-  // We'll still include its code here in case you need to reuse it, but it won't be exposed in this teacher interface.
-  const [newMember, setNewMember] = useState({
-    fullName: '',
-    residence: '',
-    prayerCell: '',
-    phoneNumber: '',
-    email: '',
-    membershipStatus: '',
-    baptized: false,
-  });
+  // Attendance tracking state.
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth());
+  const [saturdays, setSaturdays] = useState([]);
+  // "attendance" is a 2-D array: each row corresponds to a member and each column to a sabbath.
+  const [attendance, setAttendance] = useState([]);
 
   // ---------------------------
-  // Submission and Notification State
+  // Compute Saturdays for the selected month and year.
   // ---------------------------
-  const [submittingAttendance, setSubmittingAttendance] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // "success" or "error"
+  useEffect(() => {
+    const sats = getSaturdaysOfMonth(year, month);
+    setSaturdays(sats);
+  }, [year, month]);
 
   // ---------------------------
-  // Fetch Class Data from Firestore
+  // Fetch class data (including members) from Firestore.
   // ---------------------------
   useEffect(() => {
     const fetchClassData = async () => {
@@ -88,163 +43,51 @@ const AttendanceTracker = () => {
         if (classSnap.exists()) {
           const data = classSnap.data();
           setClassName(data.name || '');
-          setTeacher(data.teacher || '');
-          setElder(data.elder || '');
-          setMembers(data.members || []);
+          const fetchedMembers = data.members || [];
+          setMembers(fetchedMembers);
+          // Initialize the attendance array for each member (all set to false).
+          const initialAttendance = fetchedMembers.map(() =>
+            new Array(getSaturdaysOfMonth(year, month).length).fill(false)
+          );
+          setAttendance(initialAttendance);
+        } else {
+          console.error('No class data found for classId:', classId);
         }
       } catch (error) {
-        console.error('Error fetching class data:', error);
-        setSnackbarMessage('Error fetching class data');
-        setSnackbarSeverity('error');
-        setSnackbarOpen(true);
-      } finally {
-        setLoading(false);
+        console.error("Error fetching class data:", error);
       }
     };
 
     fetchClassData();
-  }, [classId]);
+  }, [classId, year, month]);
 
   // ---------------------------
-  // Compute Saturdays for Selected Month/Year
-  // ---------------------------
-  useEffect(() => {
-    setSaturdays(getSaturdaysOfMonth(year, month));
-  }, [month, year]);
-
-  // ---------------------------
-  // (Optional) New Member Form Handlers (Admin Only)
-  // ---------------------------
-  const handleNewMemberChange = (field, value) => {
-    setNewMember((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddMember = async () => {
-    if (
-      !newMember.fullName.trim() ||
-      !newMember.email.trim() ||
-      !newMember.phoneNumber.trim() ||
-      !newMember.membershipStatus
-    ) {
-      setSnackbarMessage("Please fill out all required fields for the new member.");
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const newMemberData = {
-      fullName: newMember.fullName.trim(),
-      residence: newMember.residence.trim(),
-      prayerCell: newMember.prayerCell.trim(),
-      phoneNumber: newMember.phoneNumber.trim(),
-      email: newMember.email.trim(),
-      membershipStatus: newMember.membershipStatus,
-      baptized: newMember.baptized,
-      attendance: new Array(saturdays.length).fill(false),
-    };
-
-    try {
-      await addMemberToClass(classId, newMemberData);
-      const classRef = doc(db, 'classes', classId);
-      const classSnap = await getDoc(classRef);
-      if (classSnap.exists()) {
-        const data = classSnap.data();
-        setMembers(data.members || []);
-        setSnackbarMessage("Member added successfully!");
-        setSnackbarSeverity("success");
-        setSnackbarOpen(true);
-      }
-      setNewMember({
-        fullName: '',
-        residence: '',
-        prayerCell: '',
-        phoneNumber: '',
-        email: '',
-        membershipStatus: '',
-        baptized: false,
-      });
-    } catch (error) {
-      console.error("Error adding new member:", error);
-      setSnackbarMessage("Error adding member, please try again.");
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
-    }
-  };
-
-  // ---------------------------
-  // Toggle Attendance for a Member on a Specific Saturday
+  // Toggle attendance for a specific member on a specific sabbath.
   // ---------------------------
   const toggleAttendance = (memberIndex, satIndex) => {
-    const updatedMembers = [...members];
-    // Ensure the attendance array covers all saturdays.
-    if (updatedMembers[memberIndex].attendance.length < saturdays.length) {
-      const diff = saturdays.length - updatedMembers[memberIndex].attendance.length;
-      updatedMembers[memberIndex].attendance = [
-        ...updatedMembers[memberIndex].attendance,
-        ...new Array(diff).fill(false),
-      ];
-    }
-    updatedMembers[memberIndex].attendance[satIndex] = !updatedMembers[memberIndex].attendance[satIndex];
-    setMembers(updatedMembers);
+    const updatedAttendance = [...attendance];
+    updatedAttendance[memberIndex][satIndex] = !updatedAttendance[memberIndex][satIndex];
+    setAttendance(updatedAttendance);
   };
 
   // ---------------------------
-  // Export Attendance Data to CSV
-  // ---------------------------
-  const exportAttendanceToCSV = () => {
-    const header = [
-      'No.',
-      'Full Name',
-      'Residence',
-      'Prayer Cell',
-      'Phone',
-      'Email',
-      'Membership Status',
-      'Baptized?',
-      ...saturdays.map((sat) => format(sat, 'dd/MM')),
-    ];
-    const rows = members.map((member, index) => [
-      index + 1,
-      member.fullName,
-      member.residence,
-      member.prayerCell,
-      member.phoneNumber,
-      member.email,
-      member.membershipStatus,
-      member.baptized ? 'Yes' : 'No',
-      ...member.attendance.map((present) => (present ? 'P' : 'A')),
-    ]);
-    const csvContent = [header, ...rows]
-      .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
-      )
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${className || 'Attendance'}-${month + 1}-${year}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // ---------------------------
-  // Event Handler: Submit Attendance
+  // Event handler to submit attendance data.
   // ---------------------------
   const handleSubmitAttendance = async () => {
-    setSubmittingAttendance(true);
+    const recordId = `${year}-${month}`; // e.g. "2025-4"
     const attendanceData = {
-      recordId: `${year}-${month}`, // e.g., "2025-4"
+      recordId,
       className,
-      teacher,
-      elder,
-      month,
       year,
+      month,
+      // Format each sabbath date (e.g., "2025-04-05").
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      members, // Attendance snapshot
-      timestamp: serverTimestamp(),
+      // For each member, attach their attendance array.
+      members: members.map((member, index) => ({
+        ...member,
+        attendance: attendance[index] || [],
+      })),
+      submittedAt: serverTimestamp(),
     };
 
     try {
@@ -254,143 +97,61 @@ const AttendanceTracker = () => {
           currentUser.uid,
           currentUser.email,
           "SUBMIT_ATTENDANCE",
-          { classId, recordId: attendanceData.recordId }
+          { classId, recordId }
         );
       }
-      setSnackbarMessage("Attendance submitted successfully!");
-      setSnackbarSeverity("success");
-      setSnackbarOpen(true);
+      console.log("Attendance submitted and teacher action logged.");
+      // Optionally, you can display a notification to the user here.
     } catch (error) {
       console.error("Error submitting attendance:", error);
-      setSnackbarMessage("Error submitting attendance, please try again.");
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
-    } finally {
-      setSubmittingAttendance(false);
+      // Optionally, display an error notification.
     }
   };
 
-  if (loading) {
-    return <Typography variant="h6">Loading class data...</Typography>;
-  }
-
   return (
-    <div style={{ padding: '20px', overflowX: 'auto' }}>
-      {/* Editable Header Fields (if required by teacher) */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} md={4}>
-          <TextField
-            label="Class Name"
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField
-            label="Teacher(s)"
-            value={teacher}
-            onChange={(e) => setTeacher(e.target.value)}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField
-            label="Elder Attached"
-            value={elder}
-            onChange={(e) => setElder(e.target.value)}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={6} md={2}>
-          <TextField
-            label="Month (0-11)"
-            type="number"
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value))}
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={6} md={2}>
-          <TextField
-            label="Year"
-            type="number"
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            fullWidth
-          />
-        </Grid>
-      </Grid>
-
-      <Typography variant="h5" gutterBottom>
-        {className || 'Class Name'} Attendance for {month + 1}/{year}
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Attendance Tracker for "{className}"
+      </Typography>
+      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+        Mark attendance for each sabbath in {month + 1}/{year}
       </Typography>
 
-      {/* Attendance Data Table */}
-      <TableContainer component={Paper} sx={{ mb: 2, minWidth: '1100px' }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>No.</TableCell>
-              <TableCell>Full Name</TableCell>
-              <TableCell>Residence</TableCell>
-              <TableCell>Prayer Cell</TableCell>
-              <TableCell>Phone</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Membership Status</TableCell>
-              <TableCell>Baptized?</TableCell>
-              {saturdays.map((sat, idx) => (
-                <TableCell key={idx}>{format(sat, 'dd/MM')}</TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {members.map((member, index) => (
-              <TableRow key={index}>
-                <TableCell>{index + 1}</TableCell>
-                <TableCell>{member.fullName}</TableCell>
-                <TableCell>{member.residence}</TableCell>
-                <TableCell>{member.prayerCell}</TableCell>
-                <TableCell>{member.phoneNumber}</TableCell>
-                <TableCell>{member.email}</TableCell>
-                <TableCell>{member.membershipStatus}</TableCell>
-                <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
-                {member.attendance.map((present, satIndex) => (
-                  <TableCell key={satIndex}>
-                    <Checkbox
-                      checked={present}
-                      onChange={() => toggleAttendance(index, satIndex)}
-                    />
-                  </TableCell>
-                ))}
-              </TableRow>
+      {/* Attendance Table */}
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr>
+            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Member</th>
+            {saturdays.map((sat, dateIndex) => (
+              <th key={dateIndex} style={{ border: '1px solid #ddd', padding: '8px' }}>
+                {format(sat, 'MMM dd')}
+              </th>
             ))}
-            {/* Remove the New Member Entry Row from the Teacher Interface */}
-          </TableBody>
-        </Table>
-      </TableContainer>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((member, memberIndex) => (
+            <tr key={memberIndex}>
+              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{member.fullName}</td>
+              {saturdays.map((_, dateIndex) => (
+                <td key={dateIndex} style={{ border: '1px solid #ddd', textAlign: 'center', padding: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={attendance[memberIndex] ? attendance[memberIndex][dateIndex] : false}
+                    onChange={() => toggleAttendance(memberIndex, dateIndex)}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      {/* Export and Submit Actions */}
-      <Grid container spacing={2}>
-        <Grid item>
-          <Button variant="outlined" color="secondary" onClick={exportAttendanceToCSV} sx={{ mr: 2 }}>
-            Export to CSV
-          </Button>
-        </Grid>
-        <Grid item>
-          <Button variant="contained" color="primary" onClick={handleSubmitAttendance} disabled={submittingAttendance}>
-            {submittingAttendance ? "Submitting..." : "Submit Attendance"}
-          </Button>
-        </Grid>
-      </Grid>
-
-      {/* Snackbar for Notifications */}
-      <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={() => setSnackbarOpen(false)}>
-        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </div>
+      {/* Submit Attendance Button */}
+      <Button variant="contained" onClick={handleSubmitAttendance} sx={{ mt: 2 }}>
+        Submit Attendance
+      </Button>
+    </Box>
   );
 };
 
