@@ -1,4 +1,3 @@
-// src/firebaseHelpers.js
 import {
   doc,
   updateDoc,
@@ -9,10 +8,10 @@ import {
   deleteDoc,
   setDoc,
   getDocs,
+  getDoc,
   serverTimestamp,
   query,
   where,
-  getDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -106,7 +105,7 @@ export const getAttendanceRecordsForClass = async (classId) => {
   try {
     const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
     const recordsSnapshot = await getDocs(attendanceRecordsCollectionRef);
-    const records = recordsSnapshot.docs.map(doc => ({
+    const records = recordsSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
@@ -156,7 +155,7 @@ export const getAttendanceRecordsForClassByDate = async (classId, startDate, end
       where('timestamp', '<=', endDate)
     );
     const recordsSnapshot = await getDocs(q);
-    const records = recordsSnapshot.docs.map(doc => ({
+    const records = recordsSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
@@ -173,8 +172,8 @@ export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) =>
   let totalSessions = 0;
   let attendedSessions = 0;
   
-  attendanceRecords.forEach(record => {
-    record.members?.forEach(member => {
+  attendanceRecords.forEach((record) => {
+    record.members?.forEach((member) => {
       if (member.email && member.email.toLowerCase() === memberIdentifier.toLowerCase()) {
         const sessions = member.attendance ? member.attendance.length : 0;
         const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;

@@ -1,6 +1,14 @@
 import { logTeacherAction } from '../firebaseHelpers';
 // src/components/AttendanceTracker.js
 // src/firebaseHelpers.js
+import { logTeacherAction } from '../firebaseHelpers';
+await submitAttendanceForClass(classId, attendanceData);
+await logTeacherAction(
+  currentUser.uid,
+  currentUser.email,
+  "SUBMIT_ATTENDANCE",
+  { classId, recordId: attendanceData.recordId }
+);
 import {
   doc,
   updateDoc,
