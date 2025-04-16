@@ -6,14 +6,21 @@ import { useAuth } from "../contexts/AuthContext";
 export default function PrivateRoute({ requiredRole }) {
   const { currentUser, userRole } = useAuth();
 
+  // If the user is not logged in, redirect to the authentication page.
   if (!currentUser) {
-    // Not logged in – redirect to the login page.
     return <Navigate to="/auth" replace />;
   }
 
-  if (requiredRole && userRole !== requiredRole) {
-    // Logged in but does not have required role – show unauthorized page or redirect.
-    return <Navigate to="/unauthorized" replace />;
+  // If a specific role is required, check that first.
+  if (requiredRole) {
+    if (userRole !== requiredRole) {
+      return <Navigate to="/unauthorized" replace />;
+    }
+  } else {
+    // When no explicit role is provided, allow access only if the user is either an Admin or a Teacher.
+    if (userRole !== "admin" && userRole !== "teacher") {
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
   return <Outlet />;

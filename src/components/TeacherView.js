@@ -1,18 +1,18 @@
 // src/components/TeacherView.js
 import React, { useState, useEffect } from 'react';
 import { Typography, Box, Button } from '@mui/material';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import MarkSaturdayAttendance from './MarkSaturdayAttendance';
 
 const TeacherView = () => {
   const { classId } = useParams();
+  const navigate = useNavigate();
+
   const [classData, setClassData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showAttendanceForm, setShowAttendanceForm] = useState(false);
 
-  // Fetch the class data from Firestore
+  // Fetch the class data from Firestore.
   useEffect(() => {
     const fetchClassData = async () => {
       try {
@@ -43,26 +43,16 @@ const TeacherView = () => {
         Teacher View - {classData.name}
       </Typography>
 
-      {/* Additional teacher-specific member management can go here */}
+      {/* Additional teacher-specific member management can be added here */}
 
-      {/* Always allow teachers to mark attendance for their class */}
+      {/* Navigate teachers to the full attendance tracker page */}
       <Button
         variant="contained"
         sx={{ mt: 3 }}
-        onClick={() => setShowAttendanceForm(!showAttendanceForm)}
+        onClick={() => navigate(`/attendance-tracker/${classId}`)}
       >
-        {showAttendanceForm ? 'Hide Attendance Form' : 'Mark Sabbath Attendance'}
+        Mark Sabbath Attendance
       </Button>
-
-      {showAttendanceForm && (
-        <MarkSaturdayAttendance
-          classData={classData}
-          onAttendanceMarked={() => {
-            // Optionally hide form or refresh class data once attendance is marked.
-            setShowAttendanceForm(false);
-          }}
-        />
-      )}
     </Box>
   );
 };

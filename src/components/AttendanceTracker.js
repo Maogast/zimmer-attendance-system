@@ -29,7 +29,7 @@ import { submitAttendanceForClass, addMemberToClass } from '../firebaseHelpers';
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
-  // Persistent class data from Firestore.
+  // Persistent class data fetched from Firestore.
   const [classDetails, setClassDetails] = useState({
     name: '',
     teacher: '',
@@ -38,20 +38,20 @@ const AttendanceTracker = () => {
   });
   const [loadingClass, setLoadingClass] = useState(true);
 
-  // Local (editable) header fields.
+  // Editable header fields (you can update these if needed).
   const [className, setClassName] = useState('');
   const [teacher, setTeacher] = useState('');
   const [elder, setElder] = useState('');
 
-  // Session details.
+  // Attendance session settings.
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
 
-  // Working members list (local state used for marking attendance).
+  // Local working attendance members list.
   const [members, setMembers] = useState([]);
 
-  // New member form state.
+  // New member entry state.
   const [newMember, setNewMember] = useState({
     fullName: '',
     residence: '',
@@ -59,28 +59,27 @@ const AttendanceTracker = () => {
     phoneNumber: '',
     email: '',
     membershipStatus: '',
-    baptized: false
+    baptized: false,
   });
 
-  // Fetch the persistent class document with current members.
   useEffect(() => {
+    // On mount fetch persistent class details from Firestore.
     const fetchClassData = async () => {
       try {
         const classRef = doc(db, 'classes', classId);
         const classSnap = await getDoc(classRef);
         if (classSnap.exists()) {
           const data = classSnap.data();
-          const persistentMembers = data.members || [];
           setClassDetails({
             name: data.name || '',
             teacher: data.teacher || '',
             elder: data.elder || '',
-            members: persistentMembers
+            members: data.members || [],
           });
           setClassName(data.name || '');
           setTeacher(data.teacher || '');
           setElder(data.elder || '');
-          setMembers(persistentMembers);
+          setMembers(data.members || []);
         }
       } catch (error) {
         console.error("Error fetching class data:", error);
@@ -92,7 +91,7 @@ const AttendanceTracker = () => {
     fetchClassData();
   }, [classId]);
 
-  // When the month or year changes, update the Saturday array.
+  // Update Saturdays when month or year changes.
   useEffect(() => {
     setSaturdays(getSaturdaysOfMonth(year, month));
   }, [month, year]);
@@ -102,44 +101,36 @@ const AttendanceTracker = () => {
     setNewMember({ ...newMember, [field]: value });
   };
 
-  // Add a new member. Use optional chaining/default if email or phone is missing to avoid errors.
+  // Add a new member persistently via addMemberToClass and refresh local state.
   const handleAddMember = async () => {
-    if (newMember.fullName.trim() === '') return;
-    const newEmail = (newMember.email || '').trim().toLowerCase();
-    const newPhone = (newMember.phoneNumber || '').trim();
-
-    // Check for duplicates in the members array.
-    const duplicate = members.find(member => {
-      const memberEmail = (member.email || '').trim().toLowerCase();
-      const memberPhone = (member.phoneNumber || '').trim();
-      return (newEmail && memberEmail === newEmail) || (newPhone && memberPhone === newPhone);
-    });
-    if (duplicate) {
-      alert("A member with the same Email or Phone number already exists.");
+    if (!newMember.fullName.trim() || !newMember.email.trim() || !newMember.phoneNumber.trim() || !newMember.membershipStatus) {
+      alert("Please fill out all required fields.");
       return;
     }
-
-    const memberToAdd = {
+    const newMemberData = {
       ...newMember,
-      attendance: new Array(saturdays.length).fill(false)
+      fullName: newMember.fullName.trim(),
+      residence: newMember.residence.trim(),
+      prayerCell: newMember.prayerCell.trim(),
+      phoneNumber: newMember.phoneNumber.trim(),
+      email: newMember.email.trim(),
+      attendance: new Array(saturdays.length).fill(false),
     };
 
     try {
-      // Update the persistent class document.
-      await addMemberToClass(classId, memberToAdd);
-      // Re-fetch the class document to update our working list.
+      await addMemberToClass(classId, newMemberData);
+      // Re-fetch class data to update local attendance list.
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         const data = classSnap.data();
-        const updatedMembers = data.members || [];
         setClassDetails({
           name: data.name || '',
           teacher: data.teacher || '',
           elder: data.elder || '',
-          members: updatedMembers
+          members: data.members || [],
         });
-        setMembers(updatedMembers);
+        setMembers(data.members || []);
       }
       // Clear new member form.
       setNewMember({
@@ -149,17 +140,18 @@ const AttendanceTracker = () => {
         phoneNumber: '',
         email: '',
         membershipStatus: '',
-        baptized: false
+        baptized: false,
       });
     } catch (error) {
       console.error("Error adding new member:", error);
+      alert("Error adding member, please try again.");
     }
   };
 
-  // Toggle attendance for a member at a specific Saturday.
+  // Toggle attendance (present/absent) for a member on a given Saturday.
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
-    // If attendance array is too short (in case we've added new Saturdays), extend it.
+    // Ensure each member has an attendance array as long as the Saturdays.
     if (updatedMembers[memberIndex].attendance.length < saturdays.length) {
       const diff = saturdays.length - updatedMembers[memberIndex].attendance.length;
       updatedMembers[memberIndex].attendance = [
@@ -171,7 +163,7 @@ const AttendanceTracker = () => {
     setMembers(updatedMembers);
   };
 
-  // Export attendance data to CSV.
+  // Export the current attendance snapshot to CSV.
   const exportAttendanceToCSV = () => {
     const header = [
       'No.',
@@ -219,20 +211,20 @@ const AttendanceTracker = () => {
       month,
       year,
       saturdays: saturdays.map(sat => format(sat, 'yyyy-MM-dd')),
-      members  // Save the working attendance snapshot along with persistent data.
+      members, // snapshot of the current working attendance for this session.
     };
 
     try {
       await submitAttendanceForClass(classId, attendanceData);
-      alert('Attendance submitted successfully!');
+      alert("Attendance submitted successfully!");
     } catch (error) {
-      console.error('Error submitting attendance:', error);
-      alert('Error submitting attendance, please try again.');
+      console.error("Error submitting attendance:", error);
+      alert("Error submitting attendance, please try again.");
     }
   };
 
   if (loadingClass) {
-    return <Typography>Loading class data...</Typography>;
+    return <Typography variant="h6">Loading class data...</Typography>;
   }
 
   return (
@@ -318,12 +310,15 @@ const AttendanceTracker = () => {
                 <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
                 {member.attendance.map((present, satIndex) => (
                   <TableCell key={satIndex}>
-                    <Checkbox checked={present} onChange={() => toggleAttendance(index, satIndex)} />
+                    <Checkbox
+                      checked={present}
+                      onChange={() => toggleAttendance(index, satIndex)}
+                    />
                   </TableCell>
                 ))}
               </TableRow>
             ))}
-            {/* Row to add a new member */}
+            {/* Row for Adding a New Member */}
             <TableRow>
               <TableCell>
                 <TextField
@@ -374,13 +369,18 @@ const AttendanceTracker = () => {
                     onChange={(e) => handleNewMemberChange('membershipStatus', e.target.value)}
                   >
                     <MenuItem value="Member">Member</MenuItem>
-                    <MenuItem value="Non-Member">Non-Member</MenuItem>
+                    <MenuItem value="Visitor">Visitor</MenuItem>
                   </Select>
                 </FormControl>
               </TableCell>
               <TableCell>
                 <FormControlLabel
-                  control={<Checkbox checked={newMember.baptized} onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} />}
+                  control={
+                    <Checkbox
+                      checked={newMember.baptized}
+                      onChange={(e) => handleNewMemberChange('baptized', e.target.checked)}
+                    />
+                  }
                   label="Baptized"
                 />
               </TableCell>
@@ -394,7 +394,7 @@ const AttendanceTracker = () => {
         </Table>
       </TableContainer>
 
-      {/* Action Buttons */}
+      {/* Action Buttons  */}
       <Grid container spacing={2}>
         <Grid item>
           <Button variant="outlined" color="secondary" onClick={exportAttendanceToCSV} sx={{ mr: 2 }}>

@@ -12,46 +12,56 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Alert,
 } from '@mui/material';
 import { addMemberToClass } from '../firebaseHelpers';
 
 const AddMemberForm = ({ classId, onMemberAdded }) => {
-  // State for each form field.
+  // States for form fields.
   const [fullName, setFullName] = useState('');
   const [residence, setResidence] = useState('');
   const [prayerCell, setPrayerCell] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [membership, setMembership] = useState('Member'); // Options: Member or Visitor
-  const [baptized, setBaptized] = useState('Not Baptized'); // Options: Baptized or Not Baptized
+  const [membership, setMembership] = useState('Member'); // Options: "Member" or "Visitor"
+  const [baptized, setBaptized] = useState('Not Baptized'); // Options: "Baptized" or "Not Baptized"
+  
+  // States for handling loading and error messages.
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Called when the form is submitted.
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Basic validation: ensure required fields are filled
+    setError('');
+
+    // Basic validation: ensure required fields are filled.
     if (!fullName.trim() || !residence.trim() || !phone.trim() || !email.trim()) {
       setError('Please fill out all required fields.');
       return;
     }
     
-    // Construct a new member object with the additional data.
+    // Optionally, you could add more validations (like checking valid email format).
+    
+    // Construct a new member object.
     const newMember = {
       fullName: fullName.trim(),
       residence: residence.trim(),
       prayerCell: prayerCell.trim(),
       phone: phone.trim(),
       email: email.trim(),
-      membership,        // "Member" or "Visitor"
-      baptized,          // "Baptized" or "Not Baptized"
-      attendance: [],    // Initialize a blank attendance record (you may later manage this via subcollections)
+      membership,    // "Member" or "Visitor"
+      baptized,      // "Baptized" or "Not Baptized"
+      attendance: [], // Initialize with an empty attendance array.
     };
 
+    setLoading(true);
+    
     try {
       // Use your helper function to add the member.
       await addMemberToClass(classId, newMember);
       
-      // Clear the form fields after submission.
+      // Clear the form fields after successful submission.
       setFullName('');
       setResidence('');
       setPrayerCell('');
@@ -59,19 +69,20 @@ const AddMemberForm = ({ classId, onMemberAdded }) => {
       setEmail('');
       setMembership('Member');
       setBaptized('Not Baptized');
-      setError('');
       
-      // Optionally refresh the parent component's data.
+      // Call the parent's onMemberAdded callback to allow a refresh.
       if (onMemberAdded) onMemberAdded();
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
       setError('Error adding member, please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
       
       {/* Full Name */}
       <TextField
@@ -149,8 +160,14 @@ const AddMemberForm = ({ classId, onMemberAdded }) => {
       </FormControl>
       
       {/* Submit Button */}
-      <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
-        Add Member
+      <Button
+        type="submit"
+        variant="contained"
+        fullWidth
+        sx={{ mt: 2 }}
+        disabled={loading}
+      >
+        {loading ? "Adding..." : "Add Member"}
       </Button>
     </Box>
   );

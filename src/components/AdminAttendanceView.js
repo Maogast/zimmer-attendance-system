@@ -1,11 +1,10 @@
 // src/components/AdminAttendanceView.js
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getAttendanceRecordsForClass } from '../firebaseHelpers';
 import {
   Typography,
-  Grid,
   Paper,
   Table,
   TableBody,
@@ -20,14 +19,14 @@ import AttendanceChart from './AttendanceChart';
 
 const AdminAttendanceView = () => {
   const { classId } = useParams();
-  
-  // Persistent class info
+
+  // Persistent class info.
   const [classInfo, setClassInfo] = useState({ name: '', teacher: '', elder: '' });
-  // Attendance records from the attendanceRecords subcollection.
+  // Attendance records.
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch class details from Firestore.
+  // Fetch class details once from Firestore.
   useEffect(() => {
     const fetchClassData = async () => {
       try {
@@ -38,7 +37,7 @@ const AdminAttendanceView = () => {
           setClassInfo({
             name: data.name || '',
             teacher: data.teacher || '',
-            elder: data.elder || ''
+            elder: data.elder || '',
           });
         }
       } catch (error) {
@@ -51,6 +50,7 @@ const AdminAttendanceView = () => {
 
   // Fetch attendance records from Firestore.
   useEffect(() => {
+    // Option 1: One-time fetch using your helper function.
     const fetchRecords = async () => {
       try {
         const records = await getAttendanceRecordsForClass(classId);
@@ -61,15 +61,29 @@ const AdminAttendanceView = () => {
         setLoading(false);
       }
     };
-
     fetchRecords();
+
+    // Option 2: Use a real-time listener with onSnapshot.
+    // Uncomment the code below to enable real-time updates.
+    /*
+    const recordsRef = collection(db, 'classes', classId, 'attendanceRecords');
+    const unsubscribe = onSnapshot(recordsRef, (snapshot) => {
+      const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAttendanceRecords(records);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error with real-time listener:", error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+    */
   }, [classId]);
 
   // -----------------------------
   // Analytics Computations
   // -----------------------------
   
-  // Compute overall attendance analytics:
+  // Overall attendance analytics.
   let overallTotalPossible = 0;
   let overallTotalAttended = 0;
   attendanceRecords.forEach(record => {
@@ -87,14 +101,14 @@ const AdminAttendanceView = () => {
       ? ((overallTotalAttended / overallTotalPossible) * 100).toFixed(2)
       : "N/A";
 
-  // Build analytics per attendance record.
+  // Analytics per attendance record.
   const recordAnalytics = attendanceRecords.map(record => {
     const sessions = record.saturdays ? record.saturdays.length : 0;
     const countMembers = record.members ? record.members.length : 0;
     const totalPossible = sessions * countMembers;
     let totalAttended = 0;
-    record.members?.forEach(m => {
-      totalAttended += m.attendance ? m.attendance.filter(Boolean).length : 0;
+    record.members?.forEach(member => {
+      totalAttended += member.attendance ? member.attendance.filter(Boolean).length : 0;
     });
     const rate = totalPossible > 0 ? ((totalAttended / totalPossible) * 100).toFixed(2) : "N/A";
     return {
@@ -102,16 +116,15 @@ const AdminAttendanceView = () => {
       sessions,
       membersCount: countMembers,
       rate,
-      // For timestamp display, if available.
       timestamp: record.timestamp && record.timestamp.toDate
         ? format(record.timestamp.toDate(), "PPP p")
         : "N/A",
     };
   });
 
-  // For Graph: Prepare data based on record IDs (assuming they are in "year-month" format).
+  // Prepare data for the chart.
   const chartData = recordAnalytics.map(rec => ({
-    month: rec.id, // e.g., "2025-4"
+    month: rec.id, // expects record IDs like "2025-4"
     attendanceRate: parseFloat(rec.rate) || 0,
   }));
 
@@ -119,7 +132,7 @@ const AdminAttendanceView = () => {
   const memberStats = {};
   attendanceRecords.forEach(record => {
     record.members?.forEach(member => {
-      // Use email as unique identifier in analytics. (Adjust as needed.)
+      // Use email as unique identifier; if missing, fallback to name.
       const key = member.email ? member.email.toLowerCase() : member.fullName;
       if (!memberStats[key]) {
         memberStats[key] = { fullName: member.fullName, totalSessions: 0, attended: 0 };
@@ -185,7 +198,7 @@ const AdminAttendanceView = () => {
         </Table>
       </TableContainer>
 
-      {/* Per-Member Analytics */}
+      {/* Per-Member Attendance Analytics */}
       <Typography variant="h5" sx={{ mt: 3 }}>Per-Member Attendance Analytics</Typography>
       <TableContainer component={Paper} sx={{ mt: 1 }}>
         <Table>

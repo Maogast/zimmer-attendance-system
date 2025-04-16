@@ -69,7 +69,10 @@ function NavigationBar({ darkMode, toggleDarkMode }) {
 function App() {
   const [darkMode, setDarkMode] = useState(false);
 
-  const theme = useMemo(() => createTheme({ palette: { mode: darkMode ? 'dark' : 'light' } }), [darkMode]);
+  const theme = useMemo(
+    () => createTheme({ palette: { mode: darkMode ? 'dark' : 'light' } }),
+    [darkMode]
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -83,21 +86,20 @@ function App() {
           <Route path="/auth" element={<AuthForm />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Protected Routes */}
+          {/* Protected Routes: Accessible to both teachers and admins */}
           <Route element={<PrivateRoute />}>
             <Route path="/" element={<ClassesDashboard />} />
+            <Route path="/attendance-tracker/:classId" element={<AttendanceTracker />} />
             <Route path="/attendance/:classId" element={<AdminAttendanceView />} />
 
-            {/* Teacher Routes */}
+            {/* Teacher-Only Routes */}
             <Route element={<PrivateRoute requiredRole="teacher" />}>
               <Route path="/teacher" element={<TeacherView />} />
             </Route>
 
-            {/* Admin Routes */}
+            {/* Admin-Only Routes */}
             <Route element={<PrivateRoute requiredRole="admin" />}>
               <Route path="/admin" element={<AdminDashboard />} />
-              {/* Dedicated attendance page route (Option 1) */}
-              <Route path="/attendance-tracker/:classId" element={<AttendanceTracker />} />
             </Route>
           </Route>
         </Routes>

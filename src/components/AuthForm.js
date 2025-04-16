@@ -8,16 +8,20 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 const AuthForm = () => {
-  // Toggle between login and sign‐up mode.
+  // Toggle between login and sign‐up modes.
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Additional state for password reset messages
+  const [resetMessage, setResetMessage] = useState('');
 
   // List of admin emails; if a new user’s email matches one of these, they get the "admin" role.
   const adminEmails = [
@@ -50,16 +54,17 @@ const AuthForm = () => {
     return unsubscribe;
   }, [navigate]);
 
-  // Email and Password-based login/sign-up
+  // Email and Password-based login/sign-up function.
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setResetMessage('');
     setLoading(true);
 
     if (isLogin) {
       try {
         await signInWithEmailAndPassword(auth, email, password);
-        // onAuthStateChanged will handle the redirect.
+        // onAuthStateChanged will handle redirect based on role.
       } catch (err) {
         setError(err.message);
       } finally {
@@ -69,6 +74,9 @@ const AuthForm = () => {
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
+        // Send email verification.
+        await sendEmailVerification(user);
+        alert("Verification email sent. Please verify your email before logging in.");
         // Determine the role based on the admin email list.
         const userRole = adminEmails.some(
           (adminEmail) => adminEmail.toLowerCase() === email.toLowerCase()
@@ -79,7 +87,7 @@ const AuthForm = () => {
           role: userRole,
           createdAt: serverTimestamp(),
         });
-        // onAuthStateChanged will then handle the redirect.
+        // onAuthStateChanged will then handle redirection.
       } catch (err) {
         setError(err.message);
       } finally {
@@ -91,6 +99,7 @@ const AuthForm = () => {
   // Google Sign-In flow.
   const handleGoogleSignIn = async () => {
     setError('');
+    setResetMessage('');
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
@@ -110,7 +119,26 @@ const AuthForm = () => {
           createdAt: serverTimestamp(),
         });
       }
-      // onAuthStateChanged handles the redirection.
+      // onAuthStateChanged handles redirection.
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Forgot Password handler.
+  const handleForgotPassword = async () => {
+    setError('');
+    setResetMessage('');
+    if (!email) {
+      setError("Please enter your email address above to reset your password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage("Password reset email sent. Please check your inbox.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -122,6 +150,7 @@ const AuthForm = () => {
     <div style={{ maxWidth: '400px', margin: '0 auto' }}>
       <h2>{isLogin ? "Login" : "Sign Up"}</h2>
       {error && <p style={{ color: 'red' }}>{error}</p>}
+      {resetMessage && <p style={{ color: 'green' }}>{resetMessage}</p>}
       
       {/* Email/Password Form */}
       <form onSubmit={handleSubmit}>
@@ -145,6 +174,24 @@ const AuthForm = () => {
           {loading ? "Processing..." : (isLogin ? "Login" : "Sign Up")}
         </button>
       </form>
+      
+      {/* Forgot Password Link for Login Mode */}
+      {isLogin && (
+        <p style={{ marginTop: '10px' }}>
+          <button
+            onClick={handleForgotPassword}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'blue',
+              cursor: 'pointer',
+              padding: 0
+            }}
+          >
+            Forgot Password?
+          </button>
+        </p>
+      )}
       
       {/* Toggle between Login and Sign-up */}
       <p style={{ marginTop: '10px' }}>
