@@ -31,7 +31,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useNavigate } from 'react-router-dom';
-import { onSnapshot, collection } from 'firebase/firestore';
+import { onSnapshot, collection, query, where, getDocs, collectionGroup } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
   addNewClass,
@@ -40,7 +40,7 @@ import {
   addMemberToClass,
 } from '../firebaseHelpers';
 
-// Helper to compute summary statistics for a class.
+// ------ Helper: Compute summary statistics for a class ------
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
   const totalMembers = members?.length || 0;
@@ -61,6 +61,26 @@ const calculateClassAttendanceSummary = (classData) => {
   return { totalMembers, totalLessons, attendanceRate };
 };
 
+// ------ Helper Functions for CSV Report Generation -------
+const convertJSONToCSV = (jsonData) => {
+  if (!jsonData || jsonData.length === 0) return '';
+  const headers = Object.keys(jsonData[0]);
+  const csvRows = [
+    headers.join(','), // CSV header row.
+    ...jsonData.map((row) => headers.map(header => `"${row[header] || ''}"`).join(','))
+  ];
+  return csvRows.join('\n');
+};
+
+const downloadCSV = (csvContent, fileName) => {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+};
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [filterClassType, setFilterClassType] = useState('All');
@@ -79,21 +99,21 @@ const AdminDashboard = () => {
     onConfirm: null,
   });
 
-  // ***** STATE FOR "Add New Class" MODAL *****
+  // ----- STATE: "Add New Class" Modal -----
   const [openAddClassModal, setOpenAddClassModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassTeacher, setNewClassTeacher] = useState('');
   const [newClassElder, setNewClassElder] = useState('');
   const [classModalError, setClassModalError] = useState('');
 
-  // ***** STATE FOR "Edit Class" MODAL *****
+  // ----- STATE: "Edit Class" Modal -----
   const [openEditClassModal, setOpenEditClassModal] = useState(false);
   const [editClassId, setEditClassId] = useState('');
   const [editClassName, setEditClassName] = useState('');
   const [editClassTeacher, setEditClassTeacher] = useState('');
   const [editClassElder, setEditClassElder] = useState('');
 
-  // ***** STATE FOR "Add New Member" MODAL *****
+  // ----- STATE: "Add New Member" Modal (Admin Only) -----
   const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [newMemberFullName, setNewMemberFullName] = useState('');
@@ -292,6 +312,71 @@ const AdminDashboard = () => {
   };
 
   // ---------------------------
+  // ADMIN REPORTING SECTION
+  // ---------------------------
+  // States for report selection.
+  const [reportMode, setReportMode] = useState('month'); // "month" or "year"
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1); // using 1-12 format
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+
+  // Adjusted Firestore Query: Using collectionGroup query in case attendance records are stored as subcollections.
+  const fetchAttendanceRecords = async () => {
+    try {
+      let q;
+      if (reportMode === 'month') {
+        q = query(
+          // Using collectionGroup to gather attendance records from all classes.
+          collectionGroup(db, 'attendanceRecords'),
+          where('year', '==', reportYear),
+          where('month', '==', reportMonth)
+        );
+      } else if (reportMode === 'year') {
+        q = query(
+          collectionGroup(db, 'attendanceRecords'),
+          where('year', '==', reportYear)
+        );
+      }
+      const querySnapshot = await getDocs(q);
+      const records = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAttendanceRecords(records);
+    } catch (error) {
+      console.error('Error fetching attendance records:', error);
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    const csvContent = convertJSONToCSV(attendanceRecords);
+    const fileName =
+      reportMode === 'month'
+        ? `attendance-${reportYear}-${reportMonth}.csv`
+        : `attendance-${reportYear}.csv`;
+    downloadCSV(csvContent, fileName);
+  };
+
+  // ------ Helper Functions for CSV Generation ------
+  const convertJSONToCSV = (jsonData) => {
+    if (!jsonData || jsonData.length === 0) return '';
+    const headers = Object.keys(jsonData[0]);
+    const csvRows = [
+      headers.join(','), // CSV header row.
+      ...jsonData.map(row =>
+        headers.map(header => `"${row[header] || ''}"`).join(',')
+      ),
+    ];
+    return csvRows.join('\n');
+  };
+
+  const downloadCSV = (csvContent, fileName) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+  };
+
+  // ---------------------------
   // RENDERING
   // ---------------------------
   if (loading) {
@@ -304,12 +389,11 @@ const AdminDashboard = () => {
         Admin Dashboard
       </Typography>
 
-      {/* Button to add a new class */}
+      {/* Classes Management Section */}
       <Button variant="contained" color="primary" onClick={handleOpenAddClassModal} sx={{ mb: 2 }}>
         Add New Class
       </Button>
 
-      {/* Filter Section */}
       <Box sx={{ mb: 2 }}>
         <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Class Type</InputLabel>
@@ -324,7 +408,6 @@ const AdminDashboard = () => {
         </FormControl>
       </Box>
 
-      {/* Classes Summary Table */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -616,6 +699,72 @@ const AdminDashboard = () => {
           </Button>
         </Box>
       </Modal>
+
+      {/* Attendance Reports Section */}
+      <Box sx={{ mt: 4, borderTop: '1px solid #ccc', pt: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Attendance Reports
+        </Typography>
+        <Box sx={{ my: 2 }}>
+          <TextField
+            select
+            label="Report Mode"
+            value={reportMode}
+            onChange={(e) => setReportMode(e.target.value)}
+            sx={{ mr: 2, width: '150px' }}
+          >
+            <MenuItem value="month">Monthly</MenuItem>
+            <MenuItem value="year">Yearly</MenuItem>
+          </TextField>
+          <TextField
+            label="Year"
+            type="number"
+            value={reportYear}
+            onChange={(e) => setReportYear(parseInt(e.target.value, 10))}
+            sx={{ mr: 2, width: '120px' }}
+          />
+          {reportMode === 'month' && (
+            <TextField
+              label="Month"
+              type="number"
+              value={reportMonth}
+              onChange={(e) => setReportMonth(parseInt(e.target.value, 10))}
+              sx={{ mr: 2, width: '120px' }}
+              inputProps={{ min: 1, max: 12 }}
+            />
+          )}
+          <Button variant="contained" onClick={fetchAttendanceRecords}>
+            Fetch Report
+          </Button>
+        </Box>
+        {attendanceRecords.length > 0 && (
+          <Box sx={{ my: 2 }}>
+            <Typography variant="subtitle1">
+              {`Found ${attendanceRecords.length} record(s) for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
+            </Typography>
+            <Button variant="outlined" onClick={handleDownloadCSV} sx={{ mt: 2 }}>
+              Download CSV
+            </Button>
+            <Box sx={{ mt: 3 }}>
+              {attendanceRecords.map(record => (
+                <Box key={record.id} sx={{ p: 1, borderBottom: '1px solid #ccc' }}>
+                  <Typography variant="body2">
+                    {`Record ID: ${record.id} | Year: ${record.year}, Month: ${record.month}, Submitted At: ${record.submittedAt || 'N/A'}`}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
+      {/* Snackbar for Feedback */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        message={snackbarMessage}
+        onClose={() => setSnackbarOpen(false)}
+      />
     </Box>
   );
 };
