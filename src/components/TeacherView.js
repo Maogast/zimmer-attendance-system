@@ -1,3 +1,4 @@
+// src/components/TeacherView.js
 import React, { useState, useEffect } from 'react';
 import { Typography, Box, List, ListItem, ListItemText } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -15,15 +16,15 @@ const TeacherView = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // If a classId is provided in the URL, navigate directly to the AttendanceTracker.
+    // If a classId is provided, navigate directly to the AttendanceTracker.
     if (classId) {
       navigate(`/attendance-tracker/${classId}`);
     } else {
-      // Otherwise, fetch the classes for the logged-in teacher.
+      // Otherwise, fetch the classes assigned to the logged-in teacher.
       const fetchTeacherClasses = async () => {
         try {
           const classesRef = collection(db, 'classes');
-          // Assumes your Firestore classes documents have a "teacher" field that matches the teacher's email.
+          // Assumes your Firestore class documents have a "teacher" field matching the teacher's email.
           const q = query(classesRef, where('teacher', '==', currentUser.email));
           const querySnapshot = await getDocs(q);
           const classesList = querySnapshot.docs.map(doc => ({

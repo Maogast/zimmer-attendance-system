@@ -1,6 +1,6 @@
 // src/components/AttendanceTracker.js
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   TextField,
   Button,
@@ -23,24 +23,16 @@ import {
   Alert,
 } from '@mui/material';
 import { format } from 'date-fns';
-import {
-  doc,
-  getDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import {
-  submitAttendanceForClass,
-  addMemberToClass,
-  logTeacherAction,
-} from '../firebaseHelpers';
+import { submitAttendanceForClass, addMemberToClass, logTeacherAction } from '../firebaseHelpers';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
 
 const AttendanceTracker = () => {
   const { classId } = useParams();
 
   // ---------------------------
-  // Authentication State
+  // Authentication State (for teacher logging)
   // ---------------------------
   const [currentUser, setCurrentUser] = useState(null);
   useEffect(() => {
@@ -49,15 +41,10 @@ const AttendanceTracker = () => {
     });
     return unsubscribe;
   }, []);
+
   // ---------------------------
   // Class & Attendance State
   // ---------------------------
-  const [ setClassData] = useState({
-    name: '',
-    teacher: '',
-    elder: '',
-    members: [],
-  });
   const [loading, setLoading] = useState(true);
   const [className, setClassName] = useState('');
   const [teacher, setTeacher] = useState('');
@@ -68,8 +55,10 @@ const AttendanceTracker = () => {
   const [members, setMembers] = useState([]);
 
   // ---------------------------
-  // New Member Form State (extended fields)
+  // New Member Form State (Admin responsibility)
   // ---------------------------
+  // For teacher view, the "Add Member" functionality should be hidden or removed.
+  // We'll still include its code here in case you need to reuse it, but it won't be exposed in this teacher interface.
   const [newMember, setNewMember] = useState({
     fullName: '',
     residence: '',
@@ -98,12 +87,6 @@ const AttendanceTracker = () => {
         const classSnap = await getDoc(classRef);
         if (classSnap.exists()) {
           const data = classSnap.data();
-          setClassData({
-            name: data.name || '',
-            teacher: data.teacher || '',
-            elder: data.elder || '',
-            members: data.members || [],
-          });
           setClassName(data.name || '');
           setTeacher(data.teacher || '');
           setElder(data.elder || '');
@@ -130,7 +113,7 @@ const AttendanceTracker = () => {
   }, [month, year]);
 
   // ---------------------------
-  // New Member Form Handlers
+  // (Optional) New Member Form Handlers (Admin Only)
   // ---------------------------
   const handleNewMemberChange = (field, value) => {
     setNewMember((prev) => ({ ...prev, [field]: value }));
@@ -162,23 +145,15 @@ const AttendanceTracker = () => {
 
     try {
       await addMemberToClass(classId, newMemberData);
-      // Refresh class data after adding member.
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         const data = classSnap.data();
-        setClassData({
-          name: data.name || '',
-          teacher: data.teacher || '',
-          elder: data.elder || '',
-          members: data.members || [],
-        });
         setMembers(data.members || []);
         setSnackbarMessage("Member added successfully!");
         setSnackbarSeverity("success");
         setSnackbarOpen(true);
       }
-      // Clear new member form.
       setNewMember({
         fullName: '',
         residence: '',
@@ -197,7 +172,7 @@ const AttendanceTracker = () => {
   };
 
   // ---------------------------
-  // Toggle Attendance Status for a Member on a Specific Saturday
+  // Toggle Attendance for a Member on a Specific Saturday
   // ---------------------------
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
@@ -256,19 +231,19 @@ const AttendanceTracker = () => {
   };
 
   // ---------------------------
-  // Submit Attendance Event Handler
+  // Event Handler: Submit Attendance
   // ---------------------------
   const handleSubmitAttendance = async () => {
     setSubmittingAttendance(true);
     const attendanceData = {
-      recordId: `${year}-${month}`, // e.g. "2025-4"
+      recordId: `${year}-${month}`, // e.g., "2025-4"
       className,
       teacher,
       elder,
       month,
       year,
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      members, // Snapshot of current attendance.
+      members, // Attendance snapshot
       timestamp: serverTimestamp(),
     };
 
@@ -301,48 +276,48 @@ const AttendanceTracker = () => {
 
   return (
     <div style={{ padding: '20px', overflowX: 'auto' }}>
-      {/* Editable Header Form */}
+      {/* Editable Header Fields (if required by teacher) */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
-          <TextField 
-            label="Class Name" 
-            value={className} 
-            onChange={(e) => setClassName(e.target.value)} 
-            fullWidth 
+          <TextField
+            label="Class Name"
+            value={className}
+            onChange={(e) => setClassName(e.target.value)}
+            fullWidth
           />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField 
-            label="Teacher(s)" 
-            value={teacher} 
-            onChange={(e) => setTeacher(e.target.value)} 
-            fullWidth 
+          <TextField
+            label="Teacher(s)"
+            value={teacher}
+            onChange={(e) => setTeacher(e.target.value)}
+            fullWidth
           />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField 
-            label="Elder Attached" 
-            value={elder} 
-            onChange={(e) => setElder(e.target.value)} 
-            fullWidth 
+          <TextField
+            label="Elder Attached"
+            value={elder}
+            onChange={(e) => setElder(e.target.value)}
+            fullWidth
           />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField 
-            label="Month (0-11)" 
+          <TextField
+            label="Month (0-11)"
             type="number"
-            value={month} 
-            onChange={(e) => setMonth(parseInt(e.target.value))} 
-            fullWidth 
+            value={month}
+            onChange={(e) => setMonth(parseInt(e.target.value))}
+            fullWidth
           />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField 
-            label="Year" 
+          <TextField
+            label="Year"
             type="number"
-            value={year} 
-            onChange={(e) => setYear(parseInt(e.target.value))} 
-            fullWidth 
+            value={year}
+            onChange={(e) => setYear(parseInt(e.target.value))}
+            fullWidth
           />
         </Grid>
       </Grid>
@@ -382,86 +357,15 @@ const AttendanceTracker = () => {
                 <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
                 {member.attendance.map((present, satIndex) => (
                   <TableCell key={satIndex}>
-                    <Checkbox 
-                      checked={present} 
-                      onChange={() => toggleAttendance(index, satIndex)} 
+                    <Checkbox
+                      checked={present}
+                      onChange={() => toggleAttendance(index, satIndex)}
                     />
                   </TableCell>
                 ))}
               </TableRow>
             ))}
-            {/* New Member Entry Row */}
-            <TableRow>
-              <TableCell>
-                <TextField 
-                  placeholder="Full Name" 
-                  value={newMember.fullName} 
-                  onChange={(e) => handleNewMemberChange('fullName', e.target.value)} 
-                  fullWidth 
-                />
-              </TableCell>
-              <TableCell>
-                <TextField 
-                  placeholder="Residence" 
-                  value={newMember.residence} 
-                  onChange={(e) => handleNewMemberChange('residence', e.target.value)} 
-                  fullWidth 
-                />
-              </TableCell>
-              <TableCell>
-                <TextField 
-                  placeholder="Prayer Cell" 
-                  value={newMember.prayerCell} 
-                  onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)} 
-                  fullWidth 
-                />
-              </TableCell>
-              <TableCell>
-                <TextField 
-                  placeholder="Phone" 
-                  value={newMember.phoneNumber} 
-                  onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)} 
-                  fullWidth 
-                />
-              </TableCell>
-              <TableCell>
-                <TextField 
-                  placeholder="Email" 
-                  value={newMember.email} 
-                  onChange={(e) => handleNewMemberChange('email', e.target.value)} 
-                  fullWidth 
-                />
-              </TableCell>
-              <TableCell>
-                <FormControl fullWidth>
-                  <InputLabel>Membership Status</InputLabel>
-                  <Select
-                    value={newMember.membershipStatus}
-                    label="Membership Status"
-                    onChange={(e) => handleNewMemberChange('membershipStatus', e.target.value)}
-                  >
-                    <MenuItem value="Member">Member</MenuItem>
-                    <MenuItem value="Visitor">Visitor</MenuItem>
-                  </Select>
-                </FormControl>
-              </TableCell>
-              <TableCell>
-                <FormControlLabel
-                  control={
-                    <Checkbox 
-                      checked={newMember.baptized} 
-                      onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} 
-                    />
-                  }
-                  label="Baptized"
-                />
-              </TableCell>
-              <TableCell colSpan={saturdays.length}>
-                <Button variant="contained" onClick={handleAddMember}>
-                  Add Member
-                </Button>
-              </TableCell>
-            </TableRow>
+            {/* Remove the New Member Entry Row from the Teacher Interface */}
           </TableBody>
         </Table>
       </TableContainer>
@@ -480,7 +384,7 @@ const AttendanceTracker = () => {
         </Grid>
       </Grid>
 
-      {/* Snackbar Notifications */}
+      {/* Snackbar for Notifications */}
       <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={() => setSnackbarOpen(false)}>
         <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage}

@@ -40,7 +40,7 @@ import {
   addMemberToClass,
 } from '../firebaseHelpers';
 
-// A helper to compute some summary statistics for each class.
+// Helper to compute summary statistics for a class.
 const calculateClassAttendanceSummary = (classData) => {
   const { members } = classData;
   const totalMembers = members?.length || 0;
@@ -71,7 +71,7 @@ const AdminDashboard = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
-  // Confirmation dialog state (used when deleting classes or members).
+  // Confirmation dialog state (used when deleting classes).
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: "",
@@ -247,7 +247,7 @@ const AdminDashboard = () => {
   };
 
   // ---------------------------
-  // MEMBER MANAGEMENT FUNCTIONS
+  // MEMBER MANAGEMENT FUNCTIONS (Admin Only)
   // ---------------------------
   const handleOpenAddMemberModal = (classId) => {
     setSelectedClassId(classId);
@@ -309,7 +309,7 @@ const AdminDashboard = () => {
         Add New Class
       </Button>
 
-      {/* Filter section */}
+      {/* Filter Section */}
       <Box sx={{ mb: 2 }}>
         <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Class Type</InputLabel>
@@ -324,7 +324,7 @@ const AdminDashboard = () => {
         </FormControl>
       </Box>
 
-      {/* Classes summary table */}
+      {/* Classes Summary Table */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -412,7 +412,7 @@ const AdminDashboard = () => {
         </Dialog>
       )}
 
-      {/* Snackbar for feedback */}
+      {/* Snackbar for Feedback */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={3000}
@@ -527,7 +527,7 @@ const AdminDashboard = () => {
         </Box>
       </Modal>
 
-      {/* Modal for Adding a New Member */}
+      {/* Modal for Adding a New Member (Admin-Only) */}
       <Modal
         open={openAddMemberModal}
         onClose={handleCloseAddMemberModal}
