@@ -9,7 +9,6 @@ import ClassesDashboard from './components/ClassesDashboard';
 import AttendanceTracker from './components/AttendanceTracker';
 import AdminDashboard from './components/AdminDashboard';
 import TeacherView from './components/TeacherView';
-import AdminAttendanceView from './components/AdminAttendanceView';
 
 // Authentication and Protected Routes
 import AuthForm from './components/AuthForm';
@@ -90,7 +89,9 @@ function App() {
           <Route element={<PrivateRoute />}>
             <Route path="/" element={<ClassesDashboard />} />
             <Route path="/attendance-tracker/:classId" element={<AttendanceTracker />} />
-            <Route path="/attendance/:classId" element={<AdminAttendanceView />} />
+            
+            {/* Fixed Route - Changed from AdminAttendanceView to AttendanceTracker */}
+            <Route path="/attendance/:classId" element={<AttendanceTracker />} />
 
             {/* Teacher-Only Routes */}
             <Route element={<PrivateRoute requiredRole="teacher" />}>
