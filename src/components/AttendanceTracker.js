@@ -18,7 +18,9 @@ import {
   Select,
   MenuItem,
   FormControlLabel,
-  Typography
+  Typography,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import { format } from 'date-fns';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
@@ -30,15 +32,15 @@ const AttendanceTracker = () => {
   const { classId } = useParams();
 
   // Persistent class data fetched from Firestore.
-  const [classDetails, setClassDetails] = useState({
+  const [classData, setClassData] = useState({
     name: '',
     teacher: '',
     elder: '',
-    members: []
+    members: [],
   });
-  const [loadingClass, setLoadingClass] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  // Editable header fields (you can update these if needed).
+  // Editable header fields (initialized from Firestore).
   const [className, setClassName] = useState('');
   const [teacher, setTeacher] = useState('');
   const [elder, setElder] = useState('');
@@ -48,10 +50,10 @@ const AttendanceTracker = () => {
   const [year, setYear] = useState(new Date().getFullYear());
   const [saturdays, setSaturdays] = useState([]);
 
-  // Local working attendance members list.
+  // Local working list of members and their attendance.
   const [members, setMembers] = useState([]);
 
-  // New member entry state.
+  // New member form state.
   const [newMember, setNewMember] = useState({
     fullName: '',
     residence: '',
@@ -62,15 +64,21 @@ const AttendanceTracker = () => {
     baptized: false,
   });
 
+  // State for handling submission and notifications.
+  const [submittingAttendance, setSubmittingAttendance] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // or "error"
+
+  // Fetch persistent class details from Firestore.
   useEffect(() => {
-    // On mount fetch persistent class details from Firestore.
     const fetchClassData = async () => {
       try {
         const classRef = doc(db, 'classes', classId);
         const classSnap = await getDoc(classRef);
         if (classSnap.exists()) {
           const data = classSnap.data();
-          setClassDetails({
+          setClassData({
             name: data.name || '',
             teacher: data.teacher || '',
             elder: data.elder || '',
@@ -83,56 +91,70 @@ const AttendanceTracker = () => {
         }
       } catch (error) {
         console.error("Error fetching class data:", error);
+        setSnackbarMessage("Error fetching class data");
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
       } finally {
-        setLoadingClass(false);
+        setLoading(false);
       }
     };
 
     fetchClassData();
   }, [classId]);
 
-  // Update Saturdays when month or year changes.
+  // Compute Saturdays for the selected month and year.
   useEffect(() => {
     setSaturdays(getSaturdaysOfMonth(year, month));
   }, [month, year]);
 
   // Handle changes in the new member form.
   const handleNewMemberChange = (field, value) => {
-    setNewMember({ ...newMember, [field]: value });
+    setNewMember((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Add a new member persistently via addMemberToClass and refresh local state.
+  // Add a new member persistently via addMemberToClass.
   const handleAddMember = async () => {
-    if (!newMember.fullName.trim() || !newMember.email.trim() || !newMember.phoneNumber.trim() || !newMember.membershipStatus) {
-      alert("Please fill out all required fields.");
+    if (
+      !newMember.fullName.trim() ||
+      !newMember.email.trim() ||
+      !newMember.phoneNumber.trim() ||
+      !newMember.membershipStatus
+    ) {
+      setSnackbarMessage("Please fill out all required fields for the new member.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
       return;
     }
     const newMemberData = {
-      ...newMember,
       fullName: newMember.fullName.trim(),
       residence: newMember.residence.trim(),
       prayerCell: newMember.prayerCell.trim(),
       phoneNumber: newMember.phoneNumber.trim(),
       email: newMember.email.trim(),
+      membershipStatus: newMember.membershipStatus,
+      baptized: newMember.baptized,
       attendance: new Array(saturdays.length).fill(false),
     };
 
     try {
       await addMemberToClass(classId, newMemberData);
-      // Re-fetch class data to update local attendance list.
+      // Re-fetch class data to update the local member list.
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         const data = classSnap.data();
-        setClassDetails({
+        setClassData({
           name: data.name || '',
           teacher: data.teacher || '',
           elder: data.elder || '',
           members: data.members || [],
         });
         setMembers(data.members || []);
+        setSnackbarMessage("Member added successfully!");
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
       }
-      // Clear new member form.
+      // Clear the new member form.
       setNewMember({
         fullName: '',
         residence: '',
@@ -144,26 +166,28 @@ const AttendanceTracker = () => {
       });
     } catch (error) {
       console.error("Error adding new member:", error);
-      alert("Error adding member, please try again.");
+      setSnackbarMessage("Error adding member, please try again.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
     }
   };
 
-  // Toggle attendance (present/absent) for a member on a given Saturday.
+  // Toggle attendance status for a member at a specified Saturday.
   const toggleAttendance = (memberIndex, satIndex) => {
     const updatedMembers = [...members];
-    // Ensure each member has an attendance array as long as the Saturdays.
+    // Extend attendance array if necessary.
     if (updatedMembers[memberIndex].attendance.length < saturdays.length) {
       const diff = saturdays.length - updatedMembers[memberIndex].attendance.length;
       updatedMembers[memberIndex].attendance = [
         ...updatedMembers[memberIndex].attendance,
-        ...new Array(diff).fill(false)
+        ...new Array(diff).fill(false),
       ];
     }
     updatedMembers[memberIndex].attendance[satIndex] = !updatedMembers[memberIndex].attendance[satIndex];
     setMembers(updatedMembers);
   };
 
-  // Export the current attendance snapshot to CSV.
+  // Export the current attendance snapshot to a CSV file.
   const exportAttendanceToCSV = () => {
     const header = [
       'No.',
@@ -174,7 +198,7 @@ const AttendanceTracker = () => {
       'Email',
       'Membership Status',
       'Baptized?',
-      ...saturdays.map(sat => format(sat, 'dd/MM'))
+      ...saturdays.map((sat) => format(sat, 'dd/MM')),
     ];
     const rows = members.map((member, index) => [
       index + 1,
@@ -185,10 +209,10 @@ const AttendanceTracker = () => {
       member.email,
       member.membershipStatus,
       member.baptized ? 'Yes' : 'No',
-      ...member.attendance.map(present => (present ? 'P' : 'A'))
+      ...member.attendance.map((present) => (present ? 'P' : 'A')),
     ]);
     const csvContent = [header, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -203,75 +227,55 @@ const AttendanceTracker = () => {
 
   // Submit the attendance snapshot to Firestore.
   const handleSubmitAttendance = async () => {
+    setSubmittingAttendance(true);
     const attendanceData = {
-      recordId: `${year}-${month}`,
+      recordId: `${year}-${month}`, // e.g., "2025-4"
       className,
       teacher,
       elder,
       month,
       year,
-      saturdays: saturdays.map(sat => format(sat, 'yyyy-MM-dd')),
-      members, // snapshot of the current working attendance for this session.
+      saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
+      members, // Snapshot of the current working attendance.
     };
 
     try {
       await submitAttendanceForClass(classId, attendanceData);
-      alert("Attendance submitted successfully!");
+      setSnackbarMessage("Attendance submitted successfully!");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
     } catch (error) {
       console.error("Error submitting attendance:", error);
-      alert("Error submitting attendance, please try again.");
+      setSnackbarMessage("Error submitting attendance, please try again.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setSubmittingAttendance(false);
     }
   };
 
-  if (loadingClass) {
+  if (loading) {
     return <Typography variant="h6">Loading class data...</Typography>;
   }
 
   return (
     <div style={{ padding: '20px', overflowX: 'auto' }}>
-      {/* Header Form */}
+      {/* Header Form: Editable session settings */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Class Name"
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Class Name" value={className} onChange={(e) => setClassName(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Teacher(s)"
-            value={teacher}
-            onChange={(e) => setTeacher(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Teacher(s)" value={teacher} onChange={(e) => setTeacher(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField
-            label="Elder Attached"
-            value={elder}
-            onChange={(e) => setElder(e.target.value)}
-            fullWidth
-          />
+          <TextField label="Elder Attached" value={elder} onChange={(e) => setElder(e.target.value)} fullWidth />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField
-            label="Month (0-11)"
-            type="number"
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value))}
-            fullWidth
-          />
+          <TextField label="Month (0-11)" type="number" value={month} onChange={(e) => setMonth(parseInt(e.target.value))} fullWidth />
         </Grid>
         <Grid item xs={6} md={2}>
-          <TextField
-            label="Year"
-            type="number"
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            fullWidth
-          />
+          <TextField label="Year" type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} fullWidth />
         </Grid>
       </Grid>
 
@@ -310,10 +314,7 @@ const AttendanceTracker = () => {
                 <TableCell>{member.baptized ? 'Yes' : 'No'}</TableCell>
                 {member.attendance.map((present, satIndex) => (
                   <TableCell key={satIndex}>
-                    <Checkbox
-                      checked={present}
-                      onChange={() => toggleAttendance(index, satIndex)}
-                    />
+                    <Checkbox checked={present} onChange={() => toggleAttendance(index, satIndex)} />
                   </TableCell>
                 ))}
               </TableRow>
@@ -321,44 +322,19 @@ const AttendanceTracker = () => {
             {/* Row for Adding a New Member */}
             <TableRow>
               <TableCell>
-                <TextField
-                  placeholder="Full Name"
-                  value={newMember.fullName}
-                  onChange={(e) => handleNewMemberChange('fullName', e.target.value)}
-                  fullWidth
-                />
+                <TextField placeholder="Full Name" value={newMember.fullName} onChange={(e) => handleNewMemberChange('fullName', e.target.value)} fullWidth />
               </TableCell>
               <TableCell>
-                <TextField
-                  placeholder="Residence"
-                  value={newMember.residence}
-                  onChange={(e) => handleNewMemberChange('residence', e.target.value)}
-                  fullWidth
-                />
+                <TextField placeholder="Residence" value={newMember.residence} onChange={(e) => handleNewMemberChange('residence', e.target.value)} fullWidth />
               </TableCell>
               <TableCell>
-                <TextField
-                  placeholder="Prayer Cell"
-                  value={newMember.prayerCell}
-                  onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)}
-                  fullWidth
-                />
+                <TextField placeholder="Prayer Cell" value={newMember.prayerCell} onChange={(e) => handleNewMemberChange('prayerCell', e.target.value)} fullWidth />
               </TableCell>
               <TableCell>
-                <TextField
-                  placeholder="Phone"
-                  value={newMember.phoneNumber}
-                  onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)}
-                  fullWidth
-                />
+                <TextField placeholder="Phone" value={newMember.phoneNumber} onChange={(e) => handleNewMemberChange('phoneNumber', e.target.value)} fullWidth />
               </TableCell>
               <TableCell>
-                <TextField
-                  placeholder="Email"
-                  value={newMember.email}
-                  onChange={(e) => handleNewMemberChange('email', e.target.value)}
-                  fullWidth
-                />
+                <TextField placeholder="Email" value={newMember.email} onChange={(e) => handleNewMemberChange('email', e.target.value)} fullWidth />
               </TableCell>
               <TableCell>
                 <FormControl fullWidth>
@@ -375,12 +351,7 @@ const AttendanceTracker = () => {
               </TableCell>
               <TableCell>
                 <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={newMember.baptized}
-                      onChange={(e) => handleNewMemberChange('baptized', e.target.checked)}
-                    />
-                  }
+                  control={<Checkbox checked={newMember.baptized} onChange={(e) => handleNewMemberChange('baptized', e.target.checked)} />}
                   label="Baptized"
                 />
               </TableCell>
@@ -394,7 +365,7 @@ const AttendanceTracker = () => {
         </Table>
       </TableContainer>
 
-      {/* Action Buttons  */}
+      {/* Export and Submit Actions */}
       <Grid container spacing={2}>
         <Grid item>
           <Button variant="outlined" color="secondary" onClick={exportAttendanceToCSV} sx={{ mr: 2 }}>
@@ -402,11 +373,18 @@ const AttendanceTracker = () => {
           </Button>
         </Grid>
         <Grid item>
-          <Button variant="contained" color="primary" onClick={handleSubmitAttendance}>
-            Submit Attendance
+          <Button variant="contained" color="primary" onClick={handleSubmitAttendance} disabled={submittingAttendance}>
+            {submittingAttendance ? "Submitting..." : "Submit Attendance"}
           </Button>
         </Grid>
       </Grid>
+
+      {/* Snackbar for notifications */}
+      <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={() => setSnackbarOpen(false)}>
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </div>
   );
 };
