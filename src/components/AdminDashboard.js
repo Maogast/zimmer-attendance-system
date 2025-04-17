@@ -55,6 +55,8 @@ import {
 import AttendanceChart from './AttendanceChart'; // For performance chart
 
 // ——— Helpers ———
+
+// Calculates summary stats for a class.
 const calculateSummary = (cls) => {
   const members = cls.members || [];
   const mCount = members.length;
@@ -71,13 +73,26 @@ const calculateSummary = (cls) => {
   };
 };
 
+// Updated CSV converter: if the header is 'members',
+// it will extract each member's name and join them with "; ".
 const toCSV = (data) => {
   if (!data.length) return '';
   const headers = Object.keys(data[0]);
   const rows = [
     headers.join(','),
     ...data.map((row) =>
-      headers.map((h) => `"${row[h] || ''}"`).join(',')
+      headers
+        .map((h) => {
+          let cell = row[h] || '';
+          if (h === 'members' && Array.isArray(cell)) {
+            cell = cell
+              .map((member) => member.fullName || member.name || '')
+              .filter((name) => name !== '')
+              .join('; ');
+          }
+          return `"${cell}"`;
+        })
+        .join(',')
     ),
   ];
   return rows.join('\n');
@@ -101,17 +116,17 @@ const AdminDashboard = () => {
   const [filterType, setFilterType] = useState('All');
   const [loading, setLoading] = useState(true);
 
-  // Snack & Confirm
+  // Snack & Confirm dialogs.
   const [snack, setSnack] = useState({ open: false, msg: '' });
   const [confirm, setConfirm] = useState({ open: false, onOk: null, title: '', text: '' });
 
-  // Add/Edit Class
+  // Add/Edit Class state.
   const [addClsOpen, setAddClsOpen] = useState(false);
   const [editClsOpen, setEditClsOpen] = useState(false);
   const [clsForm, setClsForm] = useState({ id: '', name: '', teacher: '', elder: '' });
   const [clsError, setClsError] = useState('');
 
-  // Add Member
+  // Add Member state.
   const [addMemOpen, setAddMemOpen] = useState(false);
   const [memForm, setMemForm] = useState({
     classId: '',
@@ -125,19 +140,19 @@ const AdminDashboard = () => {
   });
   const [memError, setMemError] = useState('');
 
-  // Reporting
+  // Reporting state.
   const [reportMode, setReportMode] = useState('month');
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [records, setRecords] = useState([]);
 
-  // Toggle performance chart dropdown
+  // Toggle performance chart dropdown.
   const [showChart, setShowChart] = useState(false);
 
-  // New state for embedded member attendance aggregation
+  // Embedded member attendance aggregation.
   const [selectedClassDetail, setSelectedClassDetail] = useState(null);
 
-  // — Fetch classes real-time
+  // — Fetch classes in real-time.
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, 'classes'),
@@ -155,7 +170,8 @@ const AdminDashboard = () => {
 
   // — UI helpers
   const openSnack = (msg) => setSnack({ open: true, msg });
-  const openConfirm = (title, text, onOk) => setConfirm({ open: true, title, text, onOk });
+  const openConfirm = (title, text, onOk) =>
+    setConfirm({ open: true, title, text, onOk });
   const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
 
   // — Class CRUD
@@ -223,26 +239,31 @@ const AdminDashboard = () => {
     }
   };
 
-  // — Reporting
+  // — Reporting: Fetch attendance records using collectionGroup so that even backfilled data is included.
   const fetchRecords = async () => {
-    const col = collectionGroup(db, 'attendanceRecords');
-    const qRef =
-      reportMode === 'month'
-        ? query(col, where('year', '==', reportYear), where('month', '==', reportMonth))
-        : query(col, where('year', '==', reportYear));
-    const snap = await getDocs(qRef);
-    setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    try {
+      const col = collectionGroup(db, 'attendanceRecords');
+      const qRef =
+        reportMode === 'month'
+          ? query(col, where('year', '==', reportYear), where('month', '==', reportMonth))
+          : query(col, where('year', '==', reportYear));
+      const snap = await getDocs(qRef);
+      setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error('Error fetching attendance records:', error);
+    }
   };
+
   const downloadReport = () => {
     const csv = toCSV(records);
-    const fn = reportMode === 'month'
-      ? `attendance-${reportYear}-${reportMonth}.csv`
-      : `attendance-${reportYear}.csv`;
+    const fn =
+      reportMode === 'month'
+        ? `attendance-${reportYear}-${reportMonth}.csv`
+        : `attendance-${reportYear}.csv`;
     downloadCSV(csv, fn);
   };
 
-  // Compute chart-friendly data from attendance records.
-  // We now calculate overallAttendanceRate and averageMemberRate.
+  // Compute chart-friendly data.
   const chartData = useMemo(() => {
     return records
       .map((rec) => {
@@ -255,7 +276,9 @@ const AdminDashboard = () => {
             (sum, m) => sum + (m.attendance?.filter(Boolean).length || 0),
             0
           );
-          overallAttendanceRate = Number(((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2));
+          overallAttendanceRate = Number(
+            ((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2)
+          );
           const sumMemberRates = rec.members.reduce((sum, m) => {
             const memberAttendances = m.attendance?.filter(Boolean).length || 0;
             const memberRate = (memberAttendances / totalLessons) * 100;
@@ -263,7 +286,11 @@ const AdminDashboard = () => {
           }, 0);
           averageMemberRate = Number((sumMemberRates / totalMembers).toFixed(2));
         }
-        return { period: `${rec.month}/${rec.year}`, overallAttendanceRate, averageMemberRate };
+        return {
+          period: `${rec.month}/${rec.year}`,
+          overallAttendanceRate,
+          averageMemberRate,
+        };
       })
       .sort((a, b) => {
         const [mA, yA] = a.period.split('/').map(Number);
@@ -272,12 +299,11 @@ const AdminDashboard = () => {
       });
   }, [records]);
 
-  // Handler to embed member aggregation information for a selected class.
+  // — Embedded member aggregation in a class.
   const handleViewAggregation = (cls) => {
     setSelectedClassDetail(cls);
   };
 
-  // For embedded member aggregation, total lessons is assumed from the first member if available.
   const getTotalLessons = (cls) => {
     if (cls.members && cls.members.length > 0 && cls.members[0].attendance) {
       return cls.members[0].attendance.length;
@@ -287,7 +313,7 @@ const AdminDashboard = () => {
 
   if (loading) return <Typography>Loading…</Typography>;
 
-  // — Filtered classes
+  // — Filter classes by type.
   const filtered = classes.filter(
     (c) => filterType === 'All' || c.classType === filterType
   );
@@ -394,7 +420,7 @@ const AdminDashboard = () => {
                     >
                       Manage Members
                     </Button>
-                    {/* New button for embedded member aggregation */}
+                    {/* Button for embedded aggregation */}
                     <Button
                       size="small"
                       variant="outlined"
@@ -411,7 +437,7 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* Embedded Member Attendance Aggregation for a Selected Class */}
+      {/* Embedded Member Attendance Aggregation */}
       {selectedClassDetail && (
         <Box mt={4} p={2} border="1px solid #ccc">
           <Grid container justifyContent="space-between" alignItems="center">
@@ -465,7 +491,7 @@ const AdminDashboard = () => {
         </Box>
       )}
 
-      {/* — Confirm Dialog — */}
+      {/* Confirm Dialog for Class Deletion */}
       <Dialog open={confirm.open} onClose={closeConfirm}>
         <DialogTitle>{confirm.title}</DialogTitle>
         <DialogContent>
@@ -479,7 +505,7 @@ const AdminDashboard = () => {
         </DialogActions>
       </Dialog>
 
-      {/* — Snack — */}
+      {/* Snack Notification */}
       <Snackbar
         open={snack.open}
         message={snack.msg}
@@ -487,7 +513,7 @@ const AdminDashboard = () => {
         onClose={() => setSnack((s) => ({ ...s, open: false }))}
       />
 
-      {/* — Add/Edit Class Modal — */}
+      {/* Add/Edit Class Modal */}
       <Modal
         open={addClsOpen || editClsOpen}
         onClose={() => {
@@ -538,7 +564,7 @@ const AdminDashboard = () => {
         </Box>
       </Modal>
 
-      {/* — Add Member Modal — */}
+      {/* Add Member Modal */}
       <Modal open={addMemOpen} onClose={() => setAddMemOpen(false)}>
         <Box sx={modalStyle}>
           <Typography variant="h6" gutterBottom>
@@ -629,7 +655,7 @@ const AdminDashboard = () => {
         </Box>
       </Modal>
 
-      {/* — Reporting — */}
+      {/* Reporting Section */}
       <Box mt={4} pt={3} borderTop="1px solid #ccc">
         <Typography variant="h5" gutterBottom>
           Attendance Reports
@@ -688,7 +714,7 @@ const AdminDashboard = () => {
             >
               Download CSV
             </Button>
-            {/* Dropdown Button to toggle performance chart */}
+            {/* Toggle performance chart */}
             <Button
               variant="contained"
               onClick={() => setShowChart(!showChart)}
