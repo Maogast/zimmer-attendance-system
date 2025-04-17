@@ -56,7 +56,7 @@ import AttendanceChart from './AttendanceChart'; // For performance chart
 
 // ——— Helpers ———
 
-// Calculates summary stats for a class.
+// Calculates summary stats for a class based on the current class document data.
 const calculateSummary = (cls) => {
   const members = cls.members || [];
   const mCount = members.length;
@@ -74,7 +74,7 @@ const calculateSummary = (cls) => {
 };
 
 // Updated CSV converter: if the header is 'members',
-// it will extract each member's name and join them with "; ".
+// it extracts each member's name and joins them with "; ".
 const toCSV = (data) => {
   if (!data.length) return '';
   const headers = Object.keys(data[0]);
@@ -143,15 +143,16 @@ const AdminDashboard = () => {
   // Reporting state.
   const [reportMode, setReportMode] = useState('month');
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
-  // For reporting, we use 1–12 for admin input even though data is stored as 0–11.
+  // For the Reporting UI, admin inputs 1–12 for the month.
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [records, setRecords] = useState([]);
 
   // Toggle performance chart dropdown.
   const [showChart, setShowChart] = useState(false);
 
-  // Embedded member attendance aggregation.
+  // Embedded member attendance aggregation states.
   const [selectedClassDetail, setSelectedClassDetail] = useState(null);
+  const [aggregatedData, setAggregatedData] = useState(null);
 
   // — Fetch classes in real time.
   useEffect(() => {
@@ -242,19 +243,18 @@ const AdminDashboard = () => {
 
   // — Reporting:
   // Fetch attendance records using collectionGroup so that even backfilled data is included.
-  // Since your attendance data stores the month as 0–11,
-  // we convert the admin input (1–12) to 0–11 by subtracting 1 in the query.
+  // Convert the admin input month (1–12) to 0–11 by subtracting 1 for the query.
   const fetchRecords = async () => {
     try {
-      const col = collectionGroup(db, 'attendanceRecords');
+      const colRef = collectionGroup(db, 'attendanceRecords');
       const qRef =
         reportMode === 'month'
           ? query(
-              col,
+              colRef,
               where('year', '==', reportYear),
-              where('month', '==', reportMonth - 1) // Convert to zero-index.
+              where('month', '==', reportMonth - 1)
             )
-          : query(col, where('year', '==', reportYear));
+          : query(colRef, where('year', '==', reportYear));
       const snap = await getDocs(qRef);
       setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (error) {
@@ -264,7 +264,6 @@ const AdminDashboard = () => {
 
   const downloadReport = () => {
     const csv = toCSV(records);
-    // For filename, display the month as input (1–12) for user clarity.
     const fn =
       reportMode === 'month'
         ? `attendance-${reportYear}-${reportMonth}.csv`
@@ -273,15 +272,20 @@ const AdminDashboard = () => {
   };
 
   // Compute chart-friendly data.
-  // When displaying the period, convert the stored month (0-indexed) to human-readable (1–12).
-  const chartData = useMemo(() => {
+  // When displaying, add 1 to month so that admin sees 1–12.
+  // Compute chart-friendly data with additional analytics.
+const chartData = useMemo(() => {
     return records
       .map((rec) => {
         const totalLessons = rec.saturdays?.length || 0;
         const totalMembers = rec.members?.length || 0;
         let overallAttendanceRate = 0;
         let averageMemberRate = 0;
+        let highAttendanceCount = 0;
+        let lowAttendanceCount = 0;
+        // Only compute if there are lessons and members.
         if (totalLessons > 0 && totalMembers > 0) {
+          // Calculate overall attendance.
           const totalAttendances = rec.members.reduce(
             (sum, m) => sum + (m.attendance?.filter(Boolean).length || 0),
             0
@@ -289,18 +293,27 @@ const AdminDashboard = () => {
           overallAttendanceRate = Number(
             ((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2)
           );
-          const sumMemberRates = rec.members.reduce((sum, m) => {
-            const memberAttendances = m.attendance?.filter(Boolean).length || 0;
-            const memberRate = (memberAttendances / totalLessons) * 100;
-            return sum + memberRate;
-          }, 0);
-          averageMemberRate = Number((sumMemberRates / totalMembers).toFixed(2));
+          // Compute each member's attendance rate.
+          const rateArray = rec.members.map((m) => {
+            const attended = m.attendance ? m.attendance.filter(Boolean).length : 0;
+            return (attended / totalLessons) * 100;
+          });
+          // Average member rate.
+          averageMemberRate = Number(
+            (rateArray.reduce((a, b) => a + b, 0) / totalMembers).toFixed(2)
+          );
+          // Count members above or below a given threshold.
+          const threshold = 80; // For example, 80%
+          highAttendanceCount = rateArray.filter((rate) => rate >= threshold).length;
+          lowAttendanceCount = totalMembers - highAttendanceCount;
         }
         return {
-          // Add 1 so that the period is displayed in 1–12 format.
-          period: `${rec.month + 1}/${rec.year}`,
+          period: `${rec.month + 1}/${rec.year}`, // Convert month from 0-indexed to 1-indexed.
           overallAttendanceRate,
           averageMemberRate,
+          totalMembers,
+          highAttendanceCount,
+          lowAttendanceCount,
         };
       })
       .sort((a, b) => {
@@ -310,17 +323,79 @@ const AdminDashboard = () => {
       });
   }, [records]);
 
-  // — Embedded member aggregation in a class.
-  const handleViewAggregation = (cls) => {
-    setSelectedClassDetail(cls);
+  // — Embedded member aggregation:
+  // Instead of relying on the class document's "members" field,
+  // we now query the attendanceRecords subcollection from the class to merge teacher submissions.
+  const handleViewAggregation = async (cls) => {
+    try {
+      // Query all attendance records for this class (stored in subcollection "attendanceRecords")
+      const attRecRef = collection(db, 'classes', cls.id, 'attendanceRecords');
+      const snapshot = await getDocs(attRecRef);
+      if (snapshot.empty) {
+        setAggregatedData(null);
+      } else {
+        let aggregation = null;
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (!data.members) return; // Skip if no member attendance data.
+          if (!aggregation) {
+            aggregation = data.members.map((member) => ({
+              fullName: member.fullName || member.name,
+              email: member.email,
+              attended: member.attendance ? member.attendance.filter(Boolean).length : 0,
+              total: member.attendance ? member.attendance.length : 0,
+            }));
+          } else {
+            data.members.forEach((member, index) => {
+              aggregation[index].attended += member.attendance ? member.attendance.filter(Boolean).length : 0;
+              aggregation[index].total += member.attendance ? member.attendance.length : 0;
+            });
+          }
+        });
+        setAggregatedData(aggregation);
+      }
+      setSelectedClassDetail(cls);
+    } catch (error) {
+      console.error("Error fetching aggregated data:", error);
+      setAggregatedData(null);
+      setSelectedClassDetail(cls);
+    }
   };
 
-  // For embedded aggregation, we assume total lessons from the first member’s attendance array.
-  const getTotalLessons = (cls) => {
-    if (cls.members && cls.members.length > 0 && cls.members[0].attendance) {
-      return cls.members[0].attendance.length;
+  // For rendering aggregated data, compute per-member rates.
+  const renderAggregationTable = () => {
+    if (!aggregatedData) {
+      return <Typography>No attendance records available for aggregation.</Typography>;
     }
-    return 0;
+    return (
+      <TableContainer component={Paper} sx={{ mt: 2 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell><strong>Full Name</strong></TableCell>
+              <TableCell><strong>Email</strong></TableCell>
+              <TableCell><strong>Attended Sessions</strong></TableCell>
+              <TableCell><strong>Total Sessions</strong></TableCell>
+              <TableCell><strong>Attendance Rate</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {aggregatedData.map((member, index) => {
+              const rate = member.total > 0 ? ((member.attended / member.total) * 100).toFixed(2) : 'N/A';
+              return (
+                <TableRow key={index}>
+                  <TableCell>{member.fullName}</TableCell>
+                  <TableCell>{member.email}</TableCell>
+                  <TableCell>{member.attended}</TableCell>
+                  <TableCell>{member.total}</TableCell>
+                  <TableCell>{rate}%</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
   };
 
   if (loading) return <Typography>Loading…</Typography>;
@@ -449,57 +524,25 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* Embedded Member Attendance Aggregation */}
+      {/* Embedded Attendance Aggregation View */}
       {selectedClassDetail && (
         <Box mt={4} p={2} border="1px solid #ccc">
           <Grid container justifyContent="space-between" alignItems="center">
             <Typography variant="h5">
               {`Member Attendance Aggregation for ${selectedClassDetail.name}`}
             </Typography>
-            <Button
-              variant="contained"
-              onClick={() => setSelectedClassDetail(null)}
-            >
+            <Button variant="contained" onClick={() => {
+              setSelectedClassDetail(null);
+              setAggregatedData(null);
+            }}>
               Hide Aggregation
             </Button>
           </Grid>
-          <TableContainer component={Paper} sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell><strong>Full Name</strong></TableCell>
-                  <TableCell><strong>Email</strong></TableCell>
-                  <TableCell><strong>Attended Sessions</strong></TableCell>
-                  <TableCell><strong>Total Sessions</strong></TableCell>
-                  <TableCell><strong>Attendance Rate</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {selectedClassDetail.members && selectedClassDetail.members.length > 0 ? (
-                  selectedClassDetail.members.map((member, index) => {
-                    const totalLessons = getTotalLessons(selectedClassDetail);
-                    const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;
-                    const rate = totalLessons > 0 ? ((attended / totalLessons) * 100).toFixed(2) : 'N/A';
-                    return (
-                      <TableRow key={index}>
-                        <TableCell>{member.fullName || member.name}</TableCell>
-                        <TableCell>{member.email}</TableCell>
-                        <TableCell>{attended}</TableCell>
-                        <TableCell>{totalLessons}</TableCell>
-                        <TableCell>{rate}%</TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      No member data available.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          {aggregatedData ? (
+            renderAggregationTable()
+          ) : (
+            <Typography sx={{ mt: 2 }}>No attendance records available for aggregation.</Typography>
+          )}
         </Box>
       )}
 
@@ -541,27 +584,21 @@ const AdminDashboard = () => {
             fullWidth
             label="Name"
             value={clsForm.name}
-            onChange={(e) =>
-              setClsForm((f) => ({ ...f, name: e.target.value }))
-            }
+            onChange={(e) => setClsForm((f) => ({ ...f, name: e.target.value }))}
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
             label="Teacher"
             value={clsForm.teacher}
-            onChange={(e) =>
-              setClsForm((f) => ({ ...f, teacher: e.target.value }))
-            }
+            onChange={(e) => setClsForm((f) => ({ ...f, teacher: e.target.value }))}
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
             label="Elder (opt.)"
             value={clsForm.elder}
-            onChange={(e) =>
-              setClsForm((f) => ({ ...f, elder: e.target.value }))
-            }
+            onChange={(e) => setClsForm((f) => ({ ...f, elder: e.target.value }))}
             sx={{ mb: 2 }}
           />
           {clsError && <Typography color="error">{clsError}</Typography>}
@@ -716,7 +753,8 @@ const AdminDashboard = () => {
         {records.length > 0 && (
           <Box sx={{ my: 2 }}>
             <Typography variant="subtitle1">
-              {`Found ${records.length} record${records.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
+              {`Found ${records.length} record${records.length > 1 ? 's' : ''}
+              for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
             </Typography>
             <Button
               variant="outlined"

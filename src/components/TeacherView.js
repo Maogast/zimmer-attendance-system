@@ -30,7 +30,7 @@ const TeacherView = () => {
   // Use the loading state to show a loading message while fetching data.
   const [loading, setLoading] = useState(true);
 
-  // States for confirmation dialog and feedback
+  // States for confirmation dialog and feedback.
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -38,10 +38,13 @@ const TeacherView = () => {
 
   useEffect(() => {
     // If a classId is provided, navigate directly to the AttendanceTracker.
+    // Otherwise, fetch the classes assigned to the logged-in teacher.
     if (classId) {
+      // Teacher is marking attendance.
+      // Notice: In this flow, you are already on the attendance tracker page.
+      // Later below we add a "Back to Classes" button.
       navigate(`/attendance-tracker/${classId}`);
     } else {
-      // Otherwise, fetch the classes assigned to the logged-in teacher.
       const fetchTeacherClasses = async () => {
         try {
           const classesRef = collection(db, 'classes');
@@ -81,7 +84,7 @@ const TeacherView = () => {
   };
 
   const handleConfirm = () => {
-    // On confirmation, close dialog, show feedback and navigate.
+    // On confirmation, close the dialog, show feedback and navigate.
     setConfirmOpen(false);
     setSnackbarMsg(`Redirecting to attendance tracker for ${selectedClass.name}...`);
     setSnackbarOpen(true);
@@ -102,15 +105,28 @@ const TeacherView = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Back Button */}
-      <Button
-        variant="contained"
-        startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/teacher-dashboard')}
-        sx={{ mb: 2 }}
-      >
-        Back to Dashboard
-      </Button>
+      {/* Navigation Button */}
+      {classId ? (
+        // If teacher is on the attendance tracker page (classId exists), let him go back to the class selection.
+        <Button
+          variant="contained"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/teacher')}
+          sx={{ mb: 2 }}
+        >
+          Back to Classes
+        </Button>
+      ) : (
+        // Alternatively, you might want a separate "Back to Dashboard" button if needed.
+        <Button
+          variant="contained"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/teacher-dashboard')}
+          sx={{ mb: 2 }}
+        >
+          Back to Dashboard
+        </Button>
+      )}
 
       {!classId && (
         <>
@@ -146,9 +162,7 @@ const TeacherView = () => {
         <DialogTitle id="confirm-dialog-title">Confirm Attendance Submission</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {selectedClass
-              ? `Do you want to mark attendance for ${selectedClass.name}?`
-              : ""}
+            {selectedClass ? `Do you want to mark attendance for ${selectedClass.name}?` : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
