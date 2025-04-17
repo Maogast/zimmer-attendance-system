@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import {
+import { 
   Table,
   TableBody,
   TableCell,
@@ -16,6 +16,8 @@ import {
   Button
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { deleteMemberFromClass } from '../firebaseHelpers'; // Import the helper for deletion
 
 const MemberList = () => {
   const { classId } = useParams();
@@ -23,26 +25,41 @@ const MemberList = () => {
   const [className, setClassName] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchClassMembers = async () => {
-      try {
-        const classRef = doc(db, 'classes', classId);
-        const classSnap = await getDoc(classRef);
-        if (classSnap.exists()) {
-          const data = classSnap.data();
-          setClassName(data.name || 'Unnamed Class');
-          // We expect member names to be captured in the "fullName" field.
-          setMembers(data.members || []);
-        } else {
-          console.error('Class not found for id:', classId);
-        }
-      } catch (error) {
-        console.error('Error fetching class data:', error);
+  // Extracted function to fetch members so that it can be re-used after deleting a member.
+  const fetchMembers = async () => {
+    try {
+      const classRef = doc(db, 'classes', classId);
+      const classSnap = await getDoc(classRef);
+      if (classSnap.exists()) {
+        const data = classSnap.data();
+        setClassName(data.name || 'Unnamed Class');
+        // We expect member names to be captured in the "fullName" field.
+        setMembers(data.members || []);
+      } else {
+        console.error('Class not found for id:', classId);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching class data:', error);
+    }
+  };
 
-    fetchClassMembers();
+  useEffect(() => {
+    fetchMembers();
   }, [classId]);
+
+  // Handle deletion of a member.
+  const handleDeleteMember = async (member) => {
+    const memberName = member.fullName || member.name;
+    if (window.confirm(`Are you sure you want to delete ${memberName}?`)) {
+      try {
+        await deleteMemberFromClass(classId, member);
+        // Refresh the member list after deletion.
+        fetchMembers();
+      } catch (error) {
+        console.error("Error deleting member:", error);
+      }
+    }
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -83,8 +100,17 @@ const MemberList = () => {
                   <Button
                     variant="contained"
                     onClick={() => navigate(`/admin/members/${classId}/${index}`)}
+                    sx={{ mr: 1 }}
                   >
                     View Details
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => handleDeleteMember(member)}
+                  >
+                    Delete
                   </Button>
                 </TableCell>
               </TableRow>

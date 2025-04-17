@@ -131,8 +131,11 @@ const AdminDashboard = () => {
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [records, setRecords] = useState([]);
 
-  // New state for toggling performance chart dropdown
+  // Toggle performance chart dropdown
   const [showChart, setShowChart] = useState(false);
+
+  // New state for embedded member attendance aggregation
+  const [selectedClassDetail, setSelectedClassDetail] = useState(null);
 
   // — Fetch classes real-time
   useEffect(() => {
@@ -239,9 +242,7 @@ const AdminDashboard = () => {
   };
 
   // Compute chart-friendly data from attendance records.
-  // We now calculate:
-  // • overallAttendanceRate = (total attendances / (total lessons * total members)) * 100
-  // • averageMemberRate = average over members of (member's attended lessons / total lessons * 100)
+  // We now calculate overallAttendanceRate and averageMemberRate.
   const chartData = useMemo(() => {
     return records
       .map((rec) => {
@@ -270,6 +271,19 @@ const AdminDashboard = () => {
         return yA !== yB ? yA - yB : mA - mB;
       });
   }, [records]);
+
+  // Handler to embed member aggregation information for a selected class.
+  const handleViewAggregation = (cls) => {
+    setSelectedClassDetail(cls);
+  };
+
+  // For embedded member aggregation, total lessons is assumed from the first member if available.
+  const getTotalLessons = (cls) => {
+    if (cls.members && cls.members.length > 0 && cls.members[0].attendance) {
+      return cls.members[0].attendance.length;
+    }
+    return 0;
+  };
 
   if (loading) return <Typography>Loading…</Typography>;
 
@@ -329,8 +343,7 @@ const AdminDashboard = () => {
           </TableHead>
           <TableBody>
             {filtered.map((c) => {
-              const { totalMembers, totalLessons, attendanceRate } =
-                calculateSummary(c);
+              const { totalMembers, totalLessons, attendanceRate } = calculateSummary(c);
               return (
                 <TableRow key={c.id} hover>
                   <TableCell>{c.name}</TableCell>
@@ -381,6 +394,15 @@ const AdminDashboard = () => {
                     >
                       Manage Members
                     </Button>
+                    {/* New button for embedded member aggregation */}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleViewAggregation(c)}
+                      sx={{ ml: 1 }}
+                    >
+                      View Aggregation
+                    </Button>
                   </TableCell>
                 </TableRow>
               );
@@ -388,6 +410,60 @@ const AdminDashboard = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Embedded Member Attendance Aggregation for a Selected Class */}
+      {selectedClassDetail && (
+        <Box mt={4} p={2} border="1px solid #ccc">
+          <Grid container justifyContent="space-between" alignItems="center">
+            <Typography variant="h5">
+              {`Member Attendance Aggregation for ${selectedClassDetail.name}`}
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => setSelectedClassDetail(null)}
+            >
+              Hide Aggregation
+            </Button>
+          </Grid>
+          <TableContainer component={Paper} sx={{ mt: 2 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell><strong>Full Name</strong></TableCell>
+                  <TableCell><strong>Email</strong></TableCell>
+                  <TableCell><strong>Attended Sessions</strong></TableCell>
+                  <TableCell><strong>Total Sessions</strong></TableCell>
+                  <TableCell><strong>Attendance Rate</strong></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {selectedClassDetail.members && selectedClassDetail.members.length > 0 ? (
+                  selectedClassDetail.members.map((member, index) => {
+                    const totalLessons = getTotalLessons(selectedClassDetail);
+                    const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;
+                    const rate = totalLessons > 0 ? ((attended / totalLessons) * 100).toFixed(2) : 'N/A';
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>{member.fullName || member.name}</TableCell>
+                        <TableCell>{member.email}</TableCell>
+                        <TableCell>{attended}</TableCell>
+                        <TableCell>{totalLessons}</TableCell>
+                        <TableCell>{rate}%</TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center">
+                      No member data available.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
 
       {/* — Confirm Dialog — */}
       <Dialog open={confirm.open} onClose={closeConfirm}>
