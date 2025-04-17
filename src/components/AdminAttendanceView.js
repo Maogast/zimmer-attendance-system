@@ -26,7 +26,12 @@ const AdminAttendanceView = () => {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch class details once from Firestore.
+  // Aggregated data: overall aggregated per-member attendance.
+  const [aggregatedMembers, setAggregatedMembers] = useState(null);
+
+  // -----------------------------
+  // 1. Fetch Class Details
+  // -----------------------------
   useEffect(() => {
     const fetchClassData = async () => {
       try {
@@ -48,11 +53,13 @@ const AdminAttendanceView = () => {
     fetchClassData();
   }, [classId]);
 
-  // Fetch attendance records from Firestore.
+  // -----------------------------
+  // 2. Fetch Attendance Records
+  // -----------------------------
   useEffect(() => {
-    // Option 1: One-time fetch using your helper function.
     const fetchRecords = async () => {
       try {
+        // Option 1: One-time fetch using your helper function.
         const records = await getAttendanceRecordsForClass(classId);
         setAttendanceRecords(records);
       } catch (error) {
@@ -63,8 +70,7 @@ const AdminAttendanceView = () => {
     };
     fetchRecords();
 
-    // Option 2: Use a real-time listener with onSnapshot.
-    // Uncomment the code below to enable real-time updates.
+    // Option 2 (realtime listener) can be enabled by uncommenting below.
     /*
     const recordsRef = collection(db, 'classes', classId, 'attendanceRecords');
     const unsubscribe = onSnapshot(recordsRef, (snapshot) => {
@@ -80,28 +86,48 @@ const AdminAttendanceView = () => {
   }, [classId]);
 
   // -----------------------------
-  // Analytics Computations
+  // 3. Aggregate Teacher Submissions for Overall Analytics
   // -----------------------------
-  
-  // Overall attendance analytics.
+  useEffect(() => {
+    // Merge teacher submissions across all attendance records.
+    const aggregated = {};
+    attendanceRecords.forEach(record => {
+      record.members?.forEach(member => {
+        // Use email as unique key; fallback to fullName.
+        const key = member.email ? member.email.toLowerCase() : member.fullName;
+        if (!aggregated[key]) {
+          aggregated[key] = {
+            fullName: member.fullName || member.name || 'Unknown',
+            totalSessions: 0,
+            attended: 0,
+          };
+        }
+        const sessions = member.attendance ? member.attendance.length : 0;
+        const attendedCount = member.attendance ? member.attendance.filter(Boolean).length : 0;
+        aggregated[key].totalSessions += sessions;
+        aggregated[key].attended += attendedCount;
+      });
+    });
+    setAggregatedMembers(aggregated);
+  }, [attendanceRecords]);
+
+  // Compute overall aggregated analytics.
   let overallTotalPossible = 0;
   let overallTotalAttended = 0;
-  attendanceRecords.forEach(record => {
-    const sessions = record.saturdays ? record.saturdays.length : 0;
-    const membersCount = record.members ? record.members.length : 0;
-    overallTotalPossible += sessions * membersCount;
-    record.members?.forEach(member => {
-      if (member.attendance) {
-        overallTotalAttended += member.attendance.filter(Boolean).length;
-      }
+  if (aggregatedMembers) {
+    Object.values(aggregatedMembers).forEach(mem => {
+      overallTotalPossible += mem.totalSessions;
+      overallTotalAttended += mem.attended;
     });
-  });
+  }
   const overallRate =
     overallTotalPossible > 0
       ? ((overallTotalAttended / overallTotalPossible) * 100).toFixed(2)
       : "N/A";
 
-  // Analytics per attendance record.
+  // -----------------------------
+  // 4. Per-Attendance Record Analytics (each teacher submission)
+  // -----------------------------
   const recordAnalytics = attendanceRecords.map(record => {
     const sessions = record.saturdays ? record.saturdays.length : 0;
     const countMembers = record.members ? record.members.length : 0;
@@ -116,39 +142,45 @@ const AdminAttendanceView = () => {
       sessions,
       membersCount: countMembers,
       rate,
-      timestamp: record.timestamp && record.timestamp.toDate
-        ? format(record.timestamp.toDate(), "PPP p")
-        : "N/A",
+      timestamp:
+        record.timestamp && record.timestamp.toDate
+          ? format(record.timestamp.toDate(), "PPP p")
+          : "N/A",
     };
   });
 
-  // Prepare data for the chart.
-  const chartData = recordAnalytics.map(rec => ({
-    month: rec.id, // expects record IDs like "2025-4"
-    attendanceRate: parseFloat(rec.rate) || 0,
-  }));
-
-  // Compute per-member analytics across all records.
-  const memberStats = {};
-  attendanceRecords.forEach(record => {
-    record.members?.forEach(member => {
-      // Use email as unique identifier; if missing, fallback to name.
-      const key = member.email ? member.email.toLowerCase() : member.fullName;
-      if (!memberStats[key]) {
-        memberStats[key] = { fullName: member.fullName, totalSessions: 0, attended: 0 };
-      }
-      const sessions = member.attendance ? member.attendance.length : 0;
-      const attendedCount = member.attendance ? member.attendance.filter(Boolean).length : 0;
-      memberStats[key].totalSessions += sessions;
-      memberStats[key].attended += attendedCount;
-    });
+  // -----------------------------
+  // 5. Prepare Data for the Chart
+  // -----------------------------
+  // For this chart, we assume each attendance record has a stored month (zero-indexed).
+  // We'll display the period as Month/Year (with month converted to 1-indexed). 
+  const chartData = recordAnalytics.map(rec => {
+    // We'll attempt to extract the month from one of the record fields.
+    // For simplicity, we assume record.id is in the format "year-month"
+    // e.g., "2025-0" -> January 2025.
+    const parts = rec.id.split("-");
+    const recordYear = parts[0];
+    const recordMonth = parts[1] ? Number(parts[1]) + 1 : "N/A";
+    return {
+      period: `${recordMonth}/${recordYear}`,
+      attendanceRate: parseFloat(rec.rate) || 0,
+    };
   });
-  const memberStatsArray = Object.values(memberStats).map(stats => ({
-    fullName: stats.fullName,
-    totalSessions: stats.totalSessions,
-    attended: stats.attended,
-    rate: stats.totalSessions > 0 ? ((stats.attended / stats.totalSessions) * 100).toFixed(2) : "N/A",
-  }));
+
+  // -----------------------------
+  // 6. Compute Per-Member Aggregated Analytics
+  // -----------------------------
+  const memberStatsArray = aggregatedMembers
+    ? Object.values(aggregatedMembers).map(stats => ({
+        fullName: stats.fullName,
+        totalSessions: stats.totalSessions,
+        attended: stats.attended,
+        rate:
+          stats.totalSessions > 0
+            ? ((stats.attended / stats.totalSessions) * 100).toFixed(2)
+            : "N/A",
+      }))
+    : [];
 
   if (loading) {
     return <Typography>Loading attendance records...</Typography>;
@@ -164,15 +196,19 @@ const AdminAttendanceView = () => {
         Teacher: {classInfo.teacher} | Elder: {classInfo.elder}
       </Typography>
       <Typography variant="h6" sx={{ mt: 2 }}>
-        Overall Class Attendance Rate: {overallRate}%
+        Overall Aggregated Attendance Rate: {overallRate}%
       </Typography>
 
       {/* Graphical Dashboard */}
-      <Typography variant="h5" sx={{ mt: 3 }}>Monthly Attendance Trend</Typography>
+      <Typography variant="h5" sx={{ mt: 3 }}>
+        Monthly Attendance Trend
+      </Typography>
       <AttendanceChart data={chartData} />
 
       {/* Attendance Records Summary */}
-      <Typography variant="h5" sx={{ mt: 3 }}>Attendance Records</Typography>
+      <Typography variant="h5" sx={{ mt: 3 }}>
+        Attendance Records
+      </Typography>
       <TableContainer component={Paper} sx={{ mt: 1, mb: 3 }}>
         <Table>
           <TableHead>
@@ -199,7 +235,9 @@ const AdminAttendanceView = () => {
       </TableContainer>
 
       {/* Per-Member Attendance Analytics */}
-      <Typography variant="h5" sx={{ mt: 3 }}>Per-Member Attendance Analytics</Typography>
+      <Typography variant="h5" sx={{ mt: 3 }}>
+        Per-Member Attendance Analytics
+      </Typography>
       <TableContainer component={Paper} sx={{ mt: 1 }}>
         <Table>
           <TableHead>

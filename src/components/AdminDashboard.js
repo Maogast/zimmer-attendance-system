@@ -274,7 +274,7 @@ const AdminDashboard = () => {
   // Compute chart-friendly data.
   // When displaying, add 1 to month so that admin sees 1–12.
   // Compute chart-friendly data with additional analytics.
-const chartData = useMemo(() => {
+  const chartData = useMemo(() => {
     return records
       .map((rec) => {
         const totalLessons = rec.saturdays?.length || 0;
@@ -283,9 +283,7 @@ const chartData = useMemo(() => {
         let averageMemberRate = 0;
         let highAttendanceCount = 0;
         let lowAttendanceCount = 0;
-        // Only compute if there are lessons and members.
         if (totalLessons > 0 && totalMembers > 0) {
-          // Calculate overall attendance.
           const totalAttendances = rec.members.reduce(
             (sum, m) => sum + (m.attendance?.filter(Boolean).length || 0),
             0
@@ -293,22 +291,19 @@ const chartData = useMemo(() => {
           overallAttendanceRate = Number(
             ((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2)
           );
-          // Compute each member's attendance rate.
           const rateArray = rec.members.map((m) => {
             const attended = m.attendance ? m.attendance.filter(Boolean).length : 0;
             return (attended / totalLessons) * 100;
           });
-          // Average member rate.
           averageMemberRate = Number(
             (rateArray.reduce((a, b) => a + b, 0) / totalMembers).toFixed(2)
           );
-          // Count members above or below a given threshold.
-          const threshold = 80; // For example, 80%
+          const threshold = 80;
           highAttendanceCount = rateArray.filter((rate) => rate >= threshold).length;
           lowAttendanceCount = totalMembers - highAttendanceCount;
         }
         return {
-          period: `${rec.month + 1}/${rec.year}`, // Convert month from 0-indexed to 1-indexed.
+          period: `${rec.month + 1}/${rec.year}`,
           overallAttendanceRate,
           averageMemberRate,
           totalMembers,
@@ -328,7 +323,6 @@ const chartData = useMemo(() => {
   // we now query the attendanceRecords subcollection from the class to merge teacher submissions.
   const handleViewAggregation = async (cls) => {
     try {
-      // Query all attendance records for this class (stored in subcollection "attendanceRecords")
       const attRecRef = collection(db, 'classes', cls.id, 'attendanceRecords');
       const snapshot = await getDocs(attRecRef);
       if (snapshot.empty) {
@@ -337,7 +331,7 @@ const chartData = useMemo(() => {
         let aggregation = null;
         snapshot.forEach((doc) => {
           const data = doc.data();
-          if (!data.members) return; // Skip if no member attendance data.
+          if (!data.members) return;
           if (!aggregation) {
             aggregation = data.members.map((member) => ({
               fullName: member.fullName || member.name,
@@ -506,6 +500,16 @@ const chartData = useMemo(() => {
                       onClick={() => navigate(`/admin/members/${c.id}`)}
                     >
                       Manage Members
+                    </Button>
+                    {/* New button for navigating to AdminAttendanceView */}
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="info"
+                      onClick={() => navigate(`/admin/attendance/${c.id}`)}
+                      sx={{ ml: 1 }}
+                    >
+                      View Attendance
                     </Button>
                     {/* Button for embedded aggregation */}
                     <Button
@@ -753,8 +757,7 @@ const chartData = useMemo(() => {
         {records.length > 0 && (
           <Box sx={{ my: 2 }}>
             <Typography variant="subtitle1">
-              {`Found ${records.length} record${records.length > 1 ? 's' : ''}
-              for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
+              {`Found ${records.length} record${records.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
             </Typography>
             <Button
               variant="outlined"

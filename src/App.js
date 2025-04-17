@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -92,32 +93,27 @@ function App() {
       <BrowserRouter>
         {/* Navigation Bar */}
         <NavigationBar darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)} />
-
         <Routes>
           {/* Public Routes */}
           <Route path="/auth" element={<AuthForm />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
-
           {/* Protected Routes: Accessible to both teachers and admins */}
           <Route element={<PrivateRoute />}>
             <Route path="/" element={<ClassesDashboard />} />
             <Route path="/attendance-tracker/:classId" element={<AttendanceTracker />} />
-            <Route path="/attendance/:classId" element={<AdminAttendanceView />} />
-
+            {/* Admin-Only Routes */}
+            <Route element={<PrivateRoute requiredRole="admin" />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/attendance/:classId" element={<AdminAttendanceView />} />
+              <Route path="/admin/members/:classId" element={<MemberList />} />
+              <Route path="/admin/members/:classId/:memberIndex" element={<MemberDetail />} />
+            </Route>
             {/* Teacher-Only Routes */}
             <Route element={<PrivateRoute requiredRole="teacher" />}>
               <Route path="/teacher" element={<TeacherView />} />
             </Route>
-
-            {/* Admin-Only Routes */}
-            <Route element={<PrivateRoute requiredRole="admin" />}>
-              <Route path="/admin" element={<AdminDashboard />} />
-              {/* New routes for member views. These let the admin view class members
-                  and see detailed data for each member. */}
-              <Route path="/admin/members/:classId" element={<MemberList />} />
-              <Route path="/admin/members/:classId/:memberIndex" element={<MemberDetail />} />
-            </Route>
           </Route>
+          <Route path="*" element={<div>Page Not Found</div>} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
