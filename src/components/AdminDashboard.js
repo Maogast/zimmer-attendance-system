@@ -1,5 +1,5 @@
 // src/components/AdminDashboard.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -52,6 +52,7 @@ import {
   deleteClass,
   addMemberToClass,
 } from '../firebaseHelpers';
+import AttendanceChart from './AttendanceChart'; // New import for Performance Chart
 
 // ——— Helpers ———
 const calculateSummary = (cls) => {
@@ -129,6 +130,9 @@ const AdminDashboard = () => {
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [records, setRecords] = useState([]);
+
+  // New state for toggling performance chart dropdown
+  const [showChart, setShowChart] = useState(false);
 
   // — Fetch classes real-time
   useEffect(() => {
@@ -208,7 +212,7 @@ const AdminDashboard = () => {
         baptized: memForm.baptized,
         attendance: [],
       });
-      openSnack('Member added');
+      openSnack('Member added successfully');
       setAddMemOpen(false);
       setMemError('');
     } catch {
@@ -233,6 +237,31 @@ const AdminDashboard = () => {
       : `attendance-${reportYear}.csv`;
     downloadCSV(csv, fn);
   };
+
+  // Compute chart-friendly data from attendance records.
+  // Each record is expected to include: year, month, saturdays, members (with their attendance arrays)
+  const chartData = useMemo(() => {
+    return records
+      .map((rec) => {
+        const totalLessons = rec.saturdays?.length || 0;
+        const totalMembers = rec.members?.length || 0;
+        const totalAttendances =
+          rec.members?.reduce(
+            (sum, m) => sum + (m.attendance?.filter((x) => x).length || 0),
+            0
+          ) || 0;
+        const rate =
+          totalLessons * totalMembers > 0
+            ? Number(((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2))
+            : 0;
+        return { month: `${rec.month}/${rec.year}`, attendanceRate: rate };
+      })
+      .sort((a, b) => {
+        const [mA, yA] = a.month.split('/').map(Number);
+        const [mB, yB] = b.month.split('/').map(Number);
+        return yA !== yB ? yA - yB : mA - mB;
+      });
+  }, [records]);
 
   if (loading) return <Typography>Loading…</Typography>;
 
@@ -375,7 +404,13 @@ const AdminDashboard = () => {
       />
 
       {/* — Add/Edit Class Modal — */}
-      <Modal open={addClsOpen || editClsOpen} onClose={() => { setAddClsOpen(false); setEditClsOpen(false); }}>
+      <Modal
+        open={addClsOpen || editClsOpen}
+        onClose={() => {
+          setAddClsOpen(false);
+          setEditClsOpen(false);
+        }}
+      >
         <Box sx={modalStyle}>
           <Typography variant="h6" gutterBottom>
             {editClsOpen ? 'Edit Class' : 'New Class'}
@@ -384,21 +419,27 @@ const AdminDashboard = () => {
             fullWidth
             label="Name"
             value={clsForm.name}
-            onChange={(e) => setClsForm((f) => ({ ...f, name: e.target.value }))}
+            onChange={(e) =>
+              setClsForm((f) => ({ ...f, name: e.target.value }))
+            }
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
             label="Teacher"
             value={clsForm.teacher}
-            onChange={(e) => setClsForm((f) => ({ ...f, teacher: e.target.value }))}
+            onChange={(e) =>
+              setClsForm((f) => ({ ...f, teacher: e.target.value }))
+            }
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
             label="Elder (opt.)"
             value={clsForm.elder}
-            onChange={(e) => setClsForm((f) => ({ ...f, elder: e.target.value }))}
+            onChange={(e) =>
+              setClsForm((f) => ({ ...f, elder: e.target.value }))
+            }
             sx={{ mb: 2 }}
           />
           {clsError && <Typography color="error">{clsError}</Typography>}
@@ -498,11 +539,7 @@ const AdminDashboard = () => {
             </RadioGroup>
           </FormControl>
           {memError && <Typography color="error">{memError}</Typography>}
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleSaveMember}
-          >
+          <Button variant="contained" fullWidth onClick={handleSaveMember}>
             Add Member
           </Button>
         </Box>
@@ -549,11 +586,7 @@ const AdminDashboard = () => {
             </Grid>
           )}
           <Grid item>
-            <Button
-              variant="contained"
-              startIcon={<GetAppIcon />}
-              onClick={fetchRecords}
-            >
+            <Button variant="contained" startIcon={<GetAppIcon />} onClick={fetchRecords}>
               Fetch
             </Button>
           </Grid>
@@ -561,16 +594,29 @@ const AdminDashboard = () => {
         {records.length > 0 && (
           <Box mt={2}>
             <Typography>
-              Found {records.length} record{records.length > 1 && 's'}.
+              Found {records.length} record{records.length > 1 ? 's' : ''}.
             </Typography>
             <Button
               variant="outlined"
               startIcon={<GetAppIcon />}
               onClick={downloadReport}
-              sx={{ mt: 1 }}
+              sx={{ mt: 1, mr: 2 }}
             >
               Download CSV
             </Button>
+            {/* Dropdown Button to Toggle Performance Chart */}
+            <Button
+              variant="contained"
+              onClick={() => setShowChart(!showChart)}
+              sx={{ mt: 1 }}
+            >
+              {showChart ? 'Hide Performance Chart' : 'Show Performance Chart'}
+            </Button>
+            {showChart && (
+              <Box mt={3}>
+                <AttendanceChart data={chartData} />
+              </Box>
+            )}
           </Box>
         )}
       </Box>
