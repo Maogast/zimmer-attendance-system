@@ -52,7 +52,7 @@ import {
   deleteClass,
   addMemberToClass,
 } from '../firebaseHelpers';
-import AttendanceChart from './AttendanceChart'; // New import for Performance Chart
+import AttendanceChart from './AttendanceChart'; // For performance chart
 
 // ——— Helpers ———
 const calculateSummary = (cls) => {
@@ -212,7 +212,7 @@ const AdminDashboard = () => {
         baptized: memForm.baptized,
         attendance: [],
       });
-      openSnack('Member added successfully');
+      openSnack('Member added');
       setAddMemOpen(false);
       setMemError('');
     } catch {
@@ -239,7 +239,7 @@ const AdminDashboard = () => {
   };
 
   // Compute chart-friendly data from attendance records.
-  // Each record is expected to include: year, month, saturdays, members (with their attendance arrays)
+  // Each record is expected to include: year, month, saturdays, and members (with their attendance arrays)
   const chartData = useMemo(() => {
     return records
       .map((rec) => {
@@ -587,33 +587,33 @@ const AdminDashboard = () => {
           )}
           <Grid item>
             <Button variant="contained" startIcon={<GetAppIcon />} onClick={fetchRecords}>
-              Fetch
+              Fetch Report
             </Button>
           </Grid>
         </Grid>
         {records.length > 0 && (
-          <Box mt={2}>
-            <Typography>
-              Found {records.length} record{records.length > 1 ? 's' : ''}.
+          <Box sx={{ my: 2 }}>
+            <Typography variant="subtitle1">
+              {`Found ${records.length} record${records.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
             </Typography>
             <Button
               variant="outlined"
               startIcon={<GetAppIcon />}
               onClick={downloadReport}
-              sx={{ mt: 1, mr: 2 }}
+              sx={{ mt: 2, mr: 2 }}
             >
               Download CSV
             </Button>
-            {/* Dropdown Button to Toggle Performance Chart */}
+            {/* Dropdown Button to toggle performance chart */}
             <Button
               variant="contained"
               onClick={() => setShowChart(!showChart)}
-              sx={{ mt: 1 }}
+              sx={{ mt: 2 }}
             >
               {showChart ? 'Hide Performance Chart' : 'Show Performance Chart'}
             </Button>
             {showChart && (
-              <Box mt={3}>
+              <Box sx={{ mt: 3 }}>
                 <AttendanceChart data={chartData} />
               </Box>
             )}
@@ -626,7 +626,7 @@ const AdminDashboard = () => {
 
 export default AdminDashboard;
 
-// shared modal styling
+// Shared modal styling
 const modalStyle = {
   position: 'absolute',
   top: '50%',
