@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
 } from 'recharts';
 
 const AttendanceChart = ({ data }) => {
@@ -16,10 +17,12 @@ const AttendanceChart = ({ data }) => {
       <ResponsiveContainer>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="month" />
+          <XAxis dataKey="period" />
           <YAxis />
           <Tooltip />
-          <Bar dataKey="attendanceRate" fill="#82ca9d" />
+          <Legend />
+          <Bar dataKey="overallAttendanceRate" fill="#82ca9d" name="Overall Attendance" />
+          <Bar dataKey="averageMemberRate" fill="#8884d8" name="Average Member Attendance" />
         </BarChart>
       </ResponsiveContainer>
     </div>

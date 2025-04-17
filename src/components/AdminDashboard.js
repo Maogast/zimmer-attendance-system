@@ -239,26 +239,34 @@ const AdminDashboard = () => {
   };
 
   // Compute chart-friendly data from attendance records.
-  // Each record is expected to include: year, month, saturdays, and members (with their attendance arrays)
+  // We now calculate:
+  // • overallAttendanceRate = (total attendances / (total lessons * total members)) * 100
+  // • averageMemberRate = average over members of (member's attended lessons / total lessons * 100)
   const chartData = useMemo(() => {
     return records
       .map((rec) => {
         const totalLessons = rec.saturdays?.length || 0;
         const totalMembers = rec.members?.length || 0;
-        const totalAttendances =
-          rec.members?.reduce(
-            (sum, m) => sum + (m.attendance?.filter((x) => x).length || 0),
+        let overallAttendanceRate = 0;
+        let averageMemberRate = 0;
+        if (totalLessons > 0 && totalMembers > 0) {
+          const totalAttendances = rec.members.reduce(
+            (sum, m) => sum + (m.attendance?.filter(Boolean).length || 0),
             0
-          ) || 0;
-        const rate =
-          totalLessons * totalMembers > 0
-            ? Number(((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2))
-            : 0;
-        return { month: `${rec.month}/${rec.year}`, attendanceRate: rate };
+          );
+          overallAttendanceRate = Number(((totalAttendances / (totalLessons * totalMembers)) * 100).toFixed(2));
+          const sumMemberRates = rec.members.reduce((sum, m) => {
+            const memberAttendances = m.attendance?.filter(Boolean).length || 0;
+            const memberRate = (memberAttendances / totalLessons) * 100;
+            return sum + memberRate;
+          }, 0);
+          averageMemberRate = Number((sumMemberRates / totalMembers).toFixed(2));
+        }
+        return { period: `${rec.month}/${rec.year}`, overallAttendanceRate, averageMemberRate };
       })
       .sort((a, b) => {
-        const [mA, yA] = a.month.split('/').map(Number);
-        const [mB, yB] = b.month.split('/').map(Number);
+        const [mA, yA] = a.period.split('/').map(Number);
+        const [mB, yB] = b.period.split('/').map(Number);
         return yA !== yB ? yA - yB : mA - mB;
       });
   }, [records]);

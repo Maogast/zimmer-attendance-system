@@ -3,10 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { 
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Typography, Box, Button 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  Box,
+  Button
 } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 const MemberList = () => {
   const { classId } = useParams();
@@ -22,6 +31,7 @@ const MemberList = () => {
         if (classSnap.exists()) {
           const data = classSnap.data();
           setClassName(data.name || 'Unnamed Class');
+          // We expect member names to be captured in the "fullName" field.
           setMembers(data.members || []);
         } else {
           console.error('Class not found for id:', classId);
@@ -36,6 +46,16 @@ const MemberList = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Back Button to Dashboard */}
+      <Button
+        variant="contained"
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate('/admin')}
+        sx={{ mb: 2 }}
+      >
+        Back to Dashboard
+      </Button>
+      
       <Typography variant="h4" gutterBottom>
         Members of {className}
       </Typography>
@@ -43,18 +63,19 @@ const MemberList = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell><strong>Name</strong></TableCell>
+              <TableCell><strong>Full Name</strong></TableCell>
               <TableCell><strong>Email</strong></TableCell>
               <TableCell><strong>Prayer Cell</strong></TableCell>
               <TableCell><strong>Residence</strong></TableCell>
-              {/* Add additional headers if needed */}
+              {/* Add additional headers as needed */}
               <TableCell align="center"><strong>Actions</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {members.map((member, index) => (
               <TableRow key={index}>
-                <TableCell>{member.name}</TableCell>
+                {/* Use member.fullName; fall back to member.name if needed */}
+                <TableCell>{member.fullName || member.name}</TableCell>
                 <TableCell>{member.email}</TableCell>
                 <TableCell>{member.prayerCell}</TableCell>
                 <TableCell>{member.residence}</TableCell>
@@ -70,7 +91,9 @@ const MemberList = () => {
             ))}
             {members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} align="center">No members found.</TableCell>
+                <TableCell colSpan={5} align="center">
+                  No members found.
+                </TableCell>
               </TableRow>
             )}
           </TableBody>

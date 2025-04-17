@@ -18,7 +18,6 @@ import { db } from './firebase';
 // CLASS MANAGEMENT FUNCTIONS
 // -----------------------------
 
-// Function to add a new class document to the "classes" collection.
 export const addNewClass = async (classData) => {
   try {
     const docRef = await addDoc(collection(db, 'classes'), classData);
@@ -29,7 +28,6 @@ export const addNewClass = async (classData) => {
   }
 };
 
-// Function to update an existing class document.
 export const updateClass = async (classId, updatedClassData) => {
   try {
     const classRef = doc(db, 'classes', classId);
@@ -41,7 +39,6 @@ export const updateClass = async (classId, updatedClassData) => {
   }
 };
 
-// Function to delete an entire class document.
 export const deleteClass = async (classId) => {
   try {
     await deleteDoc(doc(db, 'classes', classId));
@@ -56,7 +53,6 @@ export const deleteClass = async (classId) => {
 // MEMBER MANAGEMENT FUNCTIONS
 // -----------------------------
 
-// Function to add a new member to a class document.
 export const addMemberToClass = async (classId, newMember) => {
   try {
     const classRef = doc(db, 'classes', classId);
@@ -68,7 +64,6 @@ export const addMemberToClass = async (classId, newMember) => {
   }
 };
 
-// Function to delete a member from a class document.
 export const deleteMemberFromClass = async (classId, member) => {
   try {
     const classRef = doc(db, 'classes', classId);
@@ -84,13 +79,17 @@ export const deleteMemberFromClass = async (classId, member) => {
 // ATTENDANCE FUNCTIONS
 // -----------------------------
 
-// Function to submit attendance data.
-// Writes the attendance record to the attendanceRecords subcollection.
 export const submitAttendanceForClass = async (classId, attendanceData) => {
   try {
     const recordId = `${attendanceData.year}-${attendanceData.month}`; // e.g., "2025-4"
     attendanceData.timestamp = serverTimestamp();
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
+    const attendanceDocRef = doc(
+      db,
+      'classes',
+      classId,
+      'attendanceRecords',
+      recordId
+    );
     await setDoc(attendanceDocRef, attendanceData, { merge: true });
     console.log('Attendance submitted successfully!');
   } catch (error) {
@@ -99,10 +98,14 @@ export const submitAttendanceForClass = async (classId, attendanceData) => {
   }
 };
 
-// Function to retrieve attendance records for a class.
 export const getAttendanceRecordsForClass = async (classId) => {
   try {
-    const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
+    const attendanceRecordsCollectionRef = collection(
+      db,
+      'classes',
+      classId,
+      'attendanceRecords'
+    );
     const recordsSnapshot = await getDocs(attendanceRecordsCollectionRef);
     const records = recordsSnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -119,10 +122,19 @@ export const getAttendanceRecordsForClass = async (classId) => {
 // ENHANCED ATTENDANCE FUNCTIONS
 // -----------------------------
 
-// 1. Update Attendance Record: Allows updating a previously submitted attendance record.
-export const updateAttendanceRecordForClass = async (classId, recordId, updatedData) => {
+export const updateAttendanceRecordForClass = async (
+  classId,
+  recordId,
+  updatedData
+) => {
   try {
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
+    const attendanceDocRef = doc(
+      db,
+      'classes',
+      classId,
+      'attendanceRecords',
+      recordId
+    );
     await updateDoc(attendanceDocRef, updatedData);
     console.log('Attendance record updated successfully!');
   } catch (error) {
@@ -131,10 +143,15 @@ export const updateAttendanceRecordForClass = async (classId, recordId, updatedD
   }
 };
 
-// 2. Delete Attendance Record: Allows deleting a specific attendance record.
 export const deleteAttendanceRecordForClass = async (classId, recordId) => {
   try {
-    const attendanceDocRef = doc(db, 'classes', classId, 'attendanceRecords', recordId);
+    const attendanceDocRef = doc(
+      db,
+      'classes',
+      classId,
+      'attendanceRecords',
+      recordId
+    );
     await deleteDoc(attendanceDocRef);
     console.log('Attendance record deleted successfully!');
   } catch (error) {
@@ -143,11 +160,18 @@ export const deleteAttendanceRecordForClass = async (classId, recordId) => {
   }
 };
 
-// 3. Get Attendance Records by Date Range: Retrieves attendance records within a specific date range.
-// Note: startDate and endDate should be Date objects.
-export const getAttendanceRecordsForClassByDate = async (classId, startDate, endDate) => {
+export const getAttendanceRecordsForClassByDate = async (
+  classId,
+  startDate,
+  endDate
+) => {
   try {
-    const attendanceRecordsCollectionRef = collection(db, 'classes', classId, 'attendanceRecords');
+    const attendanceRecordsCollectionRef = collection(
+      db,
+      'classes',
+      classId,
+      'attendanceRecords'
+    );
     const q = query(
       attendanceRecordsCollectionRef,
       where('timestamp', '>=', startDate),
@@ -165,15 +189,16 @@ export const getAttendanceRecordsForClassByDate = async (classId, startDate, end
   }
 };
 
-// 4. Calculate Member Analytics: Aggregates attendance records to compute total sessions, attendance count, and rate for a given member.
-// memberIdentifier should uniquely identify a member (for example, their email).
 export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) => {
   let totalSessions = 0;
   let attendedSessions = 0;
-  
+
   attendanceRecords.forEach((record) => {
     record.members?.forEach((member) => {
-      if (member.email && member.email.toLowerCase() === memberIdentifier.toLowerCase()) {
+      if (
+        member.email &&
+        member.email.toLowerCase() === memberIdentifier.toLowerCase()
+      ) {
         const sessions = member.attendance ? member.attendance.length : 0;
         const attended = member.attendance ? member.attendance.filter(Boolean).length : 0;
         totalSessions += sessions;
@@ -181,11 +206,14 @@ export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) =>
       }
     });
   });
-  
+
   return {
     totalSessions,
     attendedSessions,
-    rate: totalSessions > 0 ? ((attendedSessions / totalSessions) * 100).toFixed(2) : "N/A"
+    rate:
+      totalSessions > 0
+        ? ((attendedSessions / totalSessions) * 100).toFixed(2)
+        : "N/A",
   };
 };
 
@@ -193,14 +221,12 @@ export const calculateMemberAnalytics = (attendanceRecords, memberIdentifier) =>
 // TEACHER LOGGING FUNCTION
 // -----------------------------
 
-/**
- * Logs a teacher action in Firestore.
- * @param {string} teacherId - UID of the teacher.
- * @param {string} teacherEmail - Email of the teacher.
- * @param {string} action - Description of the action (e.g., "SUBMIT_ATTENDANCE", "ADD_MEMBER", "TOGGLE_ATTENDANCE").
- * @param {Object} details - Optional additional details about the action.
- */
-export const logTeacherAction = async (teacherId, teacherEmail, action, details = {}) => {
+export const logTeacherAction = async (
+  teacherId,
+  teacherEmail,
+  action,
+  details = {}
+) => {
   try {
     await addDoc(collection(db, "logs"), {
       teacherId,
@@ -213,4 +239,48 @@ export const logTeacherAction = async (teacherId, teacherEmail, action, details 
   } catch (error) {
     console.error("Error logging teacher action:", error);
   }
+};
+
+// -----------------------------
+// CSV HELPER FUNCTIONS
+// -----------------------------
+//
+// Converts an array of objects into a CSV string, with a special handling
+// for the "members" field: it extracts each member's fullName (or name) and
+// joins them with "; ".
+//
+// Usage: Pass an array of data objects and then download with downloadCSV.
+//
+
+export const toCSV = (data) => {
+  if (!data.length) return '';
+  const headers = Object.keys(data[0]);
+  const csvRows = [
+    headers.join(','), // header row
+    ...data.map((row) =>
+      headers
+        .map((h) => {
+          let cell = row[h] || '';
+          if (h === 'members' && Array.isArray(cell)) {
+            // Extract the full names (or fallback to name) from each member
+            cell = cell
+              .map((member) => member.fullName || member.name || '')
+              .filter((name) => name !== '')
+              .join('; ');
+          }
+          return `"${cell}"`;
+        })
+        .join(',')
+    ),
+  ];
+  return csvRows.join('\n');
+};
+
+export const downloadCSV = (csvContent, fileName) => {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
 };
