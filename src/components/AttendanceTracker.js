@@ -1,17 +1,30 @@
 // src/components/AttendanceTracker.js
 import React, { useState, useEffect } from 'react';
-import { Button, Typography, Box, TextField, MenuItem } from '@mui/material';
-import { useParams } from 'react-router-dom';
+import {
+  Button,
+  Typography,
+  Box,
+  TextField,
+  MenuItem,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+} from '@mui/material';
+import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
-// Removed "auth" from the following import as it was unused.
 import { db } from '../firebase';
 import { submitAttendanceForClass, logTeacherAction } from '../firebaseHelpers';
 import { getSaturdaysOfMonth } from '../utils/dateHelpers';
 import { useAuth } from '../contexts/AuthContext';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 const AttendanceTracker = () => {
   const { classId } = useParams();
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
 
   // Class attributes state.
@@ -25,13 +38,20 @@ const AttendanceTracker = () => {
   // "attendance" is a 2-D array: each row corresponds to a member and each column to a sabbath.
   const [attendance, setAttendance] = useState([]);
 
+  // Snackbar state for feedback on attendance submission.
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  // Confirmation dialog state for submission.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   // ---------------------------
   // Compute Saturdays for the selected month and year.
   // ---------------------------
   useEffect(() => {
     const sats = getSaturdaysOfMonth(year, month);
     setSaturdays(sats);
-    // Reinitialize attendance array in case the month/year changes.
+    // Reinitialize the attendance array based on the new sabbath dates.
     setAttendance(members.map(() => new Array(sats.length).fill(false)));
   }, [year, month, members]);
 
@@ -79,10 +99,10 @@ const AttendanceTracker = () => {
       recordId,
       className,
       year,
-      month, // Selected month
+      month, // This is the selected month
       // Format each sabbath date (e.g., "2025-04-05").
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      // Attach each member's attendance array to the corresponding member.
+      // For each member, attach their attendance array.
       members: members.map((member, index) => ({
         ...member,
         attendance: attendance[index] || [],
@@ -101,15 +121,43 @@ const AttendanceTracker = () => {
         );
       }
       console.log("Attendance submitted and teacher action logged.");
-      // Optionally, display a notification here.
+      setSnackbarMessage("Attendance submitted successfully!");
+      setSnackbarOpen(true);
     } catch (error) {
       console.error("Error submitting attendance:", error);
-      // Optionally, display an error notification.
+      setSnackbarMessage("Error submitting attendance. Please try again.");
+      setSnackbarOpen(true);
     }
+  };
+
+  // Handler to open the confirmation dialog.
+  const handleOpenConfirm = () => {
+    setConfirmOpen(true);
+  };
+
+  // Handler when teacher confirms submission.
+  const handleConfirmSubmit = () => {
+    setConfirmOpen(false);
+    handleSubmitAttendance();
+  };
+
+  // Handler to close the confirmation dialog.
+  const handleCancelConfirm = () => {
+    setConfirmOpen(false);
   };
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Back Button */}
+      <Button
+        variant="contained"
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate('/teacher-dashboard')}
+        sx={{ mb: 2 }}
+      >
+        Back to Dashboard
+      </Button>
+
       <Typography variant="h4" gutterBottom>
         Attendance Tracker for "{className}"
       </Typography>
@@ -185,9 +233,41 @@ const AttendanceTracker = () => {
       </table>
 
       {/* Submit Attendance Button */}
-      <Button variant="contained" onClick={handleSubmitAttendance} sx={{ mt: 2 }}>
+      <Button
+        variant="contained"
+        onClick={handleOpenConfirm}
+        sx={{ mt: 2 }}
+      >
         Submit Attendance
       </Button>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmOpen}
+        onClose={handleCancelConfirm}
+        aria-labelledby="confirm-dialog-title"
+      >
+        <DialogTitle id="confirm-dialog-title">Confirm Submission</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to submit attendance for "{className}" for {month + 1}/{year}?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelConfirm}>Cancel</Button>
+          <Button onClick={handleConfirmSubmit} variant="contained" color="primary">
+            Yes, Submit
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+      />
     </Box>
   );
 };

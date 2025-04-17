@@ -1,7 +1,7 @@
 // src/components/AttendanceReports.js
 import React, { useState } from 'react';
 import { Box, Typography, Button, TextField, MenuItem } from '@mui/material';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Helper: Convert an array of objects (JSON) into a CSV string.
@@ -31,24 +31,25 @@ const AttendanceReports = () => {
   // Reporting mode: "month" or "year"
   const [reportMode, setReportMode] = useState('month');
   const [year, setYear] = useState(new Date().getFullYear());
-  const [month, setMonth] = useState(new Date().getMonth() + 1); // Use 1-12 for ease
+  // Use 1-12 for ease of use.
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
 
-  // Fetch attendance records from Firestore for the given period.
+  // Fetch attendance records using collectionGroup so it fetches across all classes.
   const fetchAttendanceRecords = async () => {
     try {
       let q;
       if (reportMode === 'month') {
         // Query for a specific month and year.
         q = query(
-          collection(db, 'attendanceRecords'),
+          collectionGroup(db, 'attendanceRecords'),
           where('year', '==', year),
           where('month', '==', month)
         );
       } else if (reportMode === 'year') {
         // Query for the specified year.
         q = query(
-          collection(db, 'attendanceRecords'),
+          collectionGroup(db, 'attendanceRecords'),
           where('year', '==', year)
         );
       }
