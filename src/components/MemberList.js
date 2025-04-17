@@ -1,9 +1,9 @@
 // src/components/MemberList.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { deleteMemberFromClass } from '../firebaseHelpers'; // Import the helper for deletion
+import { deleteMemberFromClass } from '../firebaseHelpers';
 
 const MemberList = () => {
   const { classId } = useParams();
@@ -25,15 +25,14 @@ const MemberList = () => {
   const [className, setClassName] = useState('');
   const navigate = useNavigate();
 
-  // Extracted function to fetch members so that it can be re-used after deleting a member.
-  const fetchMembers = async () => {
+  // Use useCallback to memoize fetchMembers and avoid missing dependency warning.
+  const fetchMembers = useCallback(async () => {
     try {
       const classRef = doc(db, 'classes', classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         const data = classSnap.data();
         setClassName(data.name || 'Unnamed Class');
-        // We expect member names to be captured in the "fullName" field.
         setMembers(data.members || []);
       } else {
         console.error('Class not found for id:', classId);
@@ -41,11 +40,11 @@ const MemberList = () => {
     } catch (error) {
       console.error('Error fetching class data:', error);
     }
-  };
+  }, [classId]);
 
   useEffect(() => {
     fetchMembers();
-  }, [classId]);
+  }, [fetchMembers]);
 
   // Handle deletion of a member.
   const handleDeleteMember = async (member) => {
@@ -84,14 +83,12 @@ const MemberList = () => {
               <TableCell><strong>Email</strong></TableCell>
               <TableCell><strong>Prayer Cell</strong></TableCell>
               <TableCell><strong>Residence</strong></TableCell>
-              {/* Add additional headers as needed */}
               <TableCell align="center"><strong>Actions</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {members.map((member, index) => (
               <TableRow key={index}>
-                {/* Use member.fullName; fall back to member.name if needed */}
                 <TableCell>{member.fullName || member.name}</TableCell>
                 <TableCell>{member.email}</TableCell>
                 <TableCell>{member.prayerCell}</TableCell>
