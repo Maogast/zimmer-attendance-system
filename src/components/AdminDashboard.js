@@ -79,7 +79,7 @@ const toCSV = (data) => {
   if (!data.length) return '';
   const headers = Object.keys(data[0]);
   const rows = [
-    headers.join(','),
+    headers.join(','), // CSV header row.
     ...data.map((row) =>
       headers
         .map((h) => {
@@ -143,6 +143,7 @@ const AdminDashboard = () => {
   // Reporting state.
   const [reportMode, setReportMode] = useState('month');
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  // For reporting, we use 1–12 for admin input even though data is stored as 0–11.
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [records, setRecords] = useState([]);
 
@@ -152,7 +153,7 @@ const AdminDashboard = () => {
   // Embedded member attendance aggregation.
   const [selectedClassDetail, setSelectedClassDetail] = useState(null);
 
-  // — Fetch classes in real-time.
+  // — Fetch classes in real time.
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, 'classes'),
@@ -239,13 +240,20 @@ const AdminDashboard = () => {
     }
   };
 
-  // — Reporting: Fetch attendance records using collectionGroup so that even backfilled data is included.
+  // — Reporting:
+  // Fetch attendance records using collectionGroup so that even backfilled data is included.
+  // Since your attendance data stores the month as 0–11,
+  // we convert the admin input (1–12) to 0–11 by subtracting 1 in the query.
   const fetchRecords = async () => {
     try {
       const col = collectionGroup(db, 'attendanceRecords');
       const qRef =
         reportMode === 'month'
-          ? query(col, where('year', '==', reportYear), where('month', '==', reportMonth))
+          ? query(
+              col,
+              where('year', '==', reportYear),
+              where('month', '==', reportMonth - 1) // Convert to zero-index.
+            )
           : query(col, where('year', '==', reportYear));
       const snap = await getDocs(qRef);
       setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -256,6 +264,7 @@ const AdminDashboard = () => {
 
   const downloadReport = () => {
     const csv = toCSV(records);
+    // For filename, display the month as input (1–12) for user clarity.
     const fn =
       reportMode === 'month'
         ? `attendance-${reportYear}-${reportMonth}.csv`
@@ -264,6 +273,7 @@ const AdminDashboard = () => {
   };
 
   // Compute chart-friendly data.
+  // When displaying the period, convert the stored month (0-indexed) to human-readable (1–12).
   const chartData = useMemo(() => {
     return records
       .map((rec) => {
@@ -287,7 +297,8 @@ const AdminDashboard = () => {
           averageMemberRate = Number((sumMemberRates / totalMembers).toFixed(2));
         }
         return {
-          period: `${rec.month}/${rec.year}`,
+          // Add 1 so that the period is displayed in 1–12 format.
+          period: `${rec.month + 1}/${rec.year}`,
           overallAttendanceRate,
           averageMemberRate,
         };
@@ -304,6 +315,7 @@ const AdminDashboard = () => {
     setSelectedClassDetail(cls);
   };
 
+  // For embedded aggregation, we assume total lessons from the first member’s attendance array.
   const getTotalLessons = (cls) => {
     if (cls.members && cls.members.length > 0 && cls.members[0].attendance) {
       return cls.members[0].attendance.length;
