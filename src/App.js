@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -10,6 +9,10 @@ import AttendanceTracker from './components/AttendanceTracker';
 import AdminDashboard from './components/AdminDashboard';
 import TeacherView from './components/TeacherView';
 import AdminAttendanceView from './components/AdminAttendanceView';
+
+// New admin member reporting components
+import MemberList from './components/MemberList';
+import MemberDetail from './components/MemberDetail';
 
 // Authentication and Protected Routes
 import AuthForm from './components/AuthForm';
@@ -49,16 +52,25 @@ function NavigationBar({ darkMode, toggleDarkMode }) {
       <Toolbar>
         {/* Title */}
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          Church Attendance System
+          Sabbath School Attendance System
         </Typography>
         {/* Display Clock */}
         <Clock />
         {/* Dark mode toggle */}
-        <IconButton onClick={toggleDarkMode} color="inherit" aria-label="toggle dark mode">
+        <IconButton
+          onClick={toggleDarkMode}
+          color="inherit"
+          aria-label="toggle dark mode"
+        >
           {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
         </IconButton>
         {/* Logout button */}
-        <IconButton onClick={handleLogout} color="inherit" aria-label="logout" sx={{ ml: 1 }}>
+        <IconButton
+          onClick={handleLogout}
+          color="inherit"
+          aria-label="logout"
+          sx={{ ml: 1 }}
+        >
           <LogoutIcon />
         </IconButton>
       </Toolbar>
@@ -100,6 +112,10 @@ function App() {
             {/* Admin-Only Routes */}
             <Route element={<PrivateRoute requiredRole="admin" />}>
               <Route path="/admin" element={<AdminDashboard />} />
+              {/* New routes for member views. These let the admin view class members
+                  and see detailed data for each member. */}
+              <Route path="/admin/members/:classId" element={<MemberList />} />
+              <Route path="/admin/members/:classId/:memberIndex" element={<MemberDetail />} />
             </Route>
           </Route>
         </Routes>
