@@ -31,25 +31,26 @@ const AttendanceReports = () => {
   // Reporting mode: "month" or "year"
   const [reportMode, setReportMode] = useState('month');
   const [year, setYear] = useState(new Date().getFullYear());
-  // Use 1-12 for ease of use.
+  // Use 1-12 for ease of use. If user selects January as 1,
+  // we need to subtract 1 for the Firestore query.
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
 
   // Fetch attendance records using collectionGroup so it fetches across all classes.
   const fetchAttendanceRecords = async () => {
     try {
+      const col = collectionGroup(db, 'attendanceRecords');
       let q;
       if (reportMode === 'month') {
-        // Query for a specific month and year.
+        // Subtract 1 from month value for Firestore (zero-indexed in DB)
         q = query(
-          collectionGroup(db, 'attendanceRecords'),
+          col,
           where('year', '==', year),
-          where('month', '==', month)
+          where('month', '==', month - 1)
         );
       } else if (reportMode === 'year') {
-        // Query for the specified year.
         q = query(
-          collectionGroup(db, 'attendanceRecords'),
+          col,
           where('year', '==', year)
         );
       }
@@ -64,6 +65,7 @@ const AttendanceReports = () => {
   // Generate and download CSV.
   const handleDownloadCSV = () => {
     const csvContent = convertJSONToCSV(attendanceRecords);
+    // For file naming, we use the reportMonth as selected (1-12)
     const fileName = reportMode === 'month'
       ? `attendance-${year}-${month}.csv`
       : `attendance-${year}.csv`;
@@ -110,7 +112,7 @@ const AttendanceReports = () => {
       {attendanceRecords.length > 0 && (
         <Box sx={{ my: 2 }}>
           <Typography variant="subtitle1">
-            {`Found ${attendanceRecords.length} record(s) for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
+            {`Found ${attendanceRecords.length} record${attendanceRecords.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
           </Typography>
           <Button variant="outlined" onClick={handleDownloadCSV} sx={{ mt: 2 }}>
             Download CSV
@@ -119,7 +121,7 @@ const AttendanceReports = () => {
             {attendanceRecords.map(record => (
               <Box key={record.id} sx={{ p: 1, borderBottom: '1px solid #ccc' }}>
                 <Typography variant="body2">
-                  {`Record ID: ${record.id} | Year: ${record.year}, Month: ${record.month}, Submitted At: ${record.submittedAt || 'N/A'}`}
+                  {`Record ID: ${record.id} | Year: ${record.year}, Month: ${record.month + 1}, Submitted At: ${record.submittedAt || 'N/A'}`}
                 </Typography>
               </Box>
             ))}

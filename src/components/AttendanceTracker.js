@@ -32,10 +32,11 @@ const AttendanceTracker = () => {
   const [members, setMembers] = useState([]);
 
   // Attendance tracking state.
+  // We use a zero-indexed month (0 = January, 11 = December)
   const [year, setYear] = useState(new Date().getFullYear());
-  const [month, setMonth] = useState(new Date().getMonth()); // 0-indexed: 0 = January
+  const [month, setMonth] = useState(new Date().getMonth());
   const [saturdays, setSaturdays] = useState([]);
-  // "attendance" is a 2-D array: each row corresponds to a member and each column to a sabbath.
+  // "attendance" is a 2-D array where each row corresponds to a member and each column to a sabbath.
   const [attendance, setAttendance] = useState([]);
 
   // Snackbar state for feedback on attendance submission.
@@ -48,10 +49,11 @@ const AttendanceTracker = () => {
   // ---------------------------
   // Compute Saturdays for the selected month and year.
   // ---------------------------
+  // Note: The helper getSaturdaysOfMonth expects the month value to be zero-indexed.
   useEffect(() => {
     const sats = getSaturdaysOfMonth(year, month);
     setSaturdays(sats);
-    // Reinitialize the attendance array based on the new sabbath dates.
+    // Reinitialize the attendance array based on the computed number of sabbath dates.
     setAttendance(members.map(() => new Array(sats.length).fill(false)));
   }, [year, month, members]);
 
@@ -99,10 +101,10 @@ const AttendanceTracker = () => {
       recordId,
       className,
       year,
-      month, // This is the selected month
-      // Format each sabbath date (e.g., "2025-04-05").
+      month, // Month stored as 0-indexed
+      // Format each sabbath date, e.g., "2025-04-05"
       saturdays: saturdays.map((sat) => format(sat, 'yyyy-MM-dd')),
-      // For each member, attach their attendance array.
+      // Attach each member's attendance array.
       members: members.map((member, index) => ({
         ...member,
         attendance: attendance[index] || [],
@@ -168,6 +170,7 @@ const AttendanceTracker = () => {
           select
           label="Month"
           value={month}
+          // Value here is zero-indexed. The MenuItems below use 0–11.
           onChange={(e) => setMonth(Number(e.target.value))}
           sx={{ width: '150px' }}
         >
@@ -193,6 +196,7 @@ const AttendanceTracker = () => {
         />
       </Box>
 
+      {/* Display the month as 1–12 for clarity */}
       <Typography variant="subtitle1" sx={{ mb: 2 }}>
         Mark attendance for each sabbath in {month + 1}/{year}
       </Typography>
@@ -261,7 +265,7 @@ const AttendanceTracker = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Confirmation Snackbar */}
+      {/* Feedback Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={3000}
