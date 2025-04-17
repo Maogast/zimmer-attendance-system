@@ -1,7 +1,11 @@
 // src/components/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Radio from '@mui/material/Radio';
 import {
   Typography,
+  Box,
   Table,
   TableBody,
   TableCell,
@@ -16,11 +20,6 @@ import {
   Button,
   Modal,
   TextField,
-  Box,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Snackbar,
   Dialog,
   DialogTitle,
@@ -47,61 +46,61 @@ import {
   addMemberToClass,
 } from '../firebaseHelpers';
 
-// ------ Helper: Compute summary statistics for a class ------
+// ------------------------------
+// Helpers
+// ------------------------------
 const calculateClassAttendanceSummary = (classData) => {
-  const { members } = classData;
-  const totalMembers = members?.length || 0;
-  const totalLessons =
-    members && members.length > 0 && members[0].attendance
-      ? members[0].attendance.length
-      : 0;
-  let totalAttendances = 0;
-  members?.forEach((member) => {
-    totalAttendances += member.attendance?.filter((x) => x).length || 0;
-  });
-  const possibleAttendances = totalMembers * totalLessons;
-  const attendanceRate =
-    possibleAttendances > 0
-      ? ((totalAttendances / possibleAttendances) * 100).toFixed(2)
-      : 'N/A';
-  return { totalMembers, totalLessons, attendanceRate };
+  const members = classData.members || [];
+  const totalMembers = members.length;
+  const totalLessons = members[0]?.attendance?.length || 0;
+  const totalAttendances = members.reduce(
+    (sum, m) => sum + (m.attendance?.filter((x) => x).length || 0),
+    0
+  );
+  const possible = totalMembers * totalLessons;
+  return {
+    totalMembers,
+    totalLessons,
+    attendanceRate:
+      possible > 0 ? ((totalAttendances / possible) * 100).toFixed(2) : 'N/A',
+  };
 };
 
-// ------ Helper Functions for CSV Report Generation -------
 const convertJSONToCSV = (jsonData) => {
-  if (!jsonData || jsonData.length === 0) return '';
+  if (!jsonData.length) return '';
   const headers = Object.keys(jsonData[0]);
-  const csvRows = [
-    headers.join(','), // CSV header row.
+  const rows = [
+    headers.join(','),
     ...jsonData.map((row) =>
-      headers.map((header) => `"${row[header] || ''}"`).join(',')
+      headers.map((h) => `"${row[h] || ''}"`).join(',')
     ),
   ];
-  return csvRows.join('\n');
+  return rows.join('\n');
 };
 
 const downloadCSV = (csvContent, fileName) => {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
 };
 
+// ------------------------------
+// Main Component
+// ------------------------------
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
-  // State
+  // -- State: Classes & UI --
   const [classesData, setClassesData] = useState([]);
   const [filterClassType, setFilterClassType] = useState('All');
   const [loading, setLoading] = useState(true);
 
-  // Snackbar
+  // -- State: Snack & Confirm Dialog --
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-
-  // Confirmation dialog
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: '',
@@ -109,24 +108,21 @@ const AdminDashboard = () => {
     onConfirm: null,
   });
 
-  // Modal states
+  // -- State: Add/Edit Class Modals --
   const [openAddClassModal, setOpenAddClassModal] = useState(false);
-  const [openEditClassModal, setOpenEditClassModal] = useState(false);
-  const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
-
-  // Add Class fields
   const [newClassName, setNewClassName] = useState('');
   const [newClassTeacher, setNewClassTeacher] = useState('');
   const [newClassElder, setNewClassElder] = useState('');
   const [classModalError, setClassModalError] = useState('');
 
-  // Edit Class fields
+  const [openEditClassModal, setOpenEditClassModal] = useState(false);
   const [editClassId, setEditClassId] = useState('');
   const [editClassName, setEditClassName] = useState('');
   const [editClassTeacher, setEditClassTeacher] = useState('');
   const [editClassElder, setEditClassElder] = useState('');
 
-  // Add Member fields
+  // -- State: Add Member Modal --
+  const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [newMemberFullName, setNewMemberFullName] = useState('');
   const [newMemberResidence, setNewMemberResidence] = useState('');
@@ -137,14 +133,17 @@ const AdminDashboard = () => {
   const [newMemberBaptized, setNewMemberBaptized] = useState('Not Baptized');
   const [memberModalError, setMemberModalError] = useState('');
 
-  // Reporting
+  // -- State: Reporting --
   const [reportMode, setReportMode] = useState('month');
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
 
-  // Real-time fetch classes
+  // ------------------------------
+  // Effects
+  // ------------------------------
   useEffect(() => {
+    // Real‑time classes
     const unsub = onSnapshot(
       collection(db, 'classes'),
       (snap) => {
@@ -152,28 +151,30 @@ const AdminDashboard = () => {
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching classes:', err);
+        console.error(err);
         setLoading(false);
       }
     );
     return () => unsub();
   }, []);
 
-  const filteredClasses = classesData.filter(
-    (cls) => filterClassType === 'All' || cls.classType === filterClassType
-  );
-
+  // ------------------------------
+  // UI Helpers
+  // ------------------------------
   const showSnackbar = (msg) => {
     setSnackbarMessage(msg);
     setSnackbarOpen(true);
   };
 
-  const openConfirmDialog = (title, message, onConfirm) =>
+  const openConfirmDialog = (title, message, onConfirm) => {
     setConfirmDialog({ open: true, title, message, onConfirm });
+  };
   const closeConfirmDialog = () =>
     setConfirmDialog((c) => ({ ...c, open: false }));
 
-  // Add Class
+  // ------------------------------
+  // Class CRUD
+  // ------------------------------
   const handleCreateClass = async () => {
     if (!newClassName.trim() || !newClassTeacher.trim()) {
       setClassModalError('Please fill out required fields');
@@ -187,18 +188,25 @@ const AdminDashboard = () => {
         classType: 'Church Service',
         members: [],
       });
-      showSnackbar('Class added');
+      showSnackbar('Class created');
       setOpenAddClassModal(false);
       setNewClassName('');
       setNewClassTeacher('');
       setNewClassElder('');
       setClassModalError('');
     } catch {
-      setClassModalError('Error adding class');
+      setClassModalError('Error creating class');
     }
   };
 
-  // Edit Class
+  const handleOpenEditClassModal = (cls) => {
+    setEditClassId(cls.id);
+    setEditClassName(cls.name);
+    setEditClassTeacher(cls.teacher);
+    setEditClassElder(cls.elder);
+    setOpenEditClassModal(true);
+  };
+
   const handleUpdateClass = async () => {
     if (!editClassName.trim() || !editClassTeacher.trim()) {
       alert('Please fill out required fields');
@@ -217,19 +225,25 @@ const AdminDashboard = () => {
     }
   };
 
-  // Delete Class
   const handleDeleteClass = (id, name) => {
-    openConfirmDialog('Delete Class', `Delete "${name}"?`, async () => {
+    openConfirmDialog(`Delete "${name}"?`, 'This cannot be undone.', async () => {
       await deleteClass(id);
       showSnackbar('Class deleted');
       closeConfirmDialog();
     });
   };
 
-  // Add Member
+  // ------------------------------
+  // Member CRUD (Admin)
+  // ------------------------------
+  const handleOpenAddMemberModal = (classId) => {
+    setSelectedClassId(classId);
+    setOpenAddMemberModal(true);
+  };
+
   const handleAddMember = async () => {
     if (!newMemberFullName.trim() || !newMemberPhone.trim() || !newMemberEmail.trim()) {
-      setMemberModalError('Please fill required fields');
+      setMemberModalError('Please fill out required fields');
       return;
     }
     try {
@@ -245,43 +259,49 @@ const AdminDashboard = () => {
       });
       showSnackbar('Member added');
       setOpenAddMemberModal(false);
+      setMemberModalError('');
     } catch {
       setMemberModalError('Error adding member');
     }
   };
 
-  // Fetch Attendance Records
+  // ------------------------------
+  // Reporting
+  // ------------------------------
   const fetchAttendanceRecords = async () => {
+    const colGroup = collectionGroup(db, 'attendanceRecords');
+    let qRef;
+    if (reportMode === 'month') {
+      qRef = query(
+        colGroup,
+        where('year', '==', reportYear),
+        where('month', '==', reportMonth)
+      );
+    } else {
+      qRef = query(colGroup, where('year', '==', reportYear));
+    }
     try {
-      let q;
-      if (reportMode === 'month') {
-        q = query(
-          collectionGroup(db, 'attendanceRecords'),
-          where('year', '==', reportYear),
-          where('month', '==', reportMonth)
-        );
-      } else {
-        q = query(
-          collectionGroup(db, 'attendanceRecords'),
-          where('year', '==', reportYear)
-        );
-      }
-      const snap = await getDocs(q);
+      const snap = await getDocs(qRef);
       setAttendanceRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
-      console.error('Error fetching records:', err);
+      console.error(err);
     }
   };
 
   const handleDownloadCSV = () => {
     const csv = convertJSONToCSV(attendanceRecords);
-    const fileName = reportMode === 'month'
-      ? `attendance-${reportYear}-${reportMonth}.csv`
-      : `attendance-${reportYear}.csv`;
-    downloadCSV(csv, fileName);
+    const fname =
+      reportMode === 'month'
+        ? `attendance-${reportYear}-${reportMonth}.csv`
+        : `attendance-${reportYear}.csv`;
+    downloadCSV(csv, fname);
   };
 
-  if (loading) return <Typography>Loading classes...</Typography>;
+  if (loading) return <Typography>Loading classes…</Typography>;
+
+  const filtered = classesData.filter(
+    (c) => filterClassType === 'All' || c.classType === filterClassType
+  );
 
   return (
     <Box sx={{ p: 3 }}>
@@ -289,17 +309,16 @@ const AdminDashboard = () => {
         Admin Dashboard
       </Typography>
 
-      {/* Class Management */}
+      {/* ────── Class Management ────── */}
       <Button
         variant="contained"
-        color="primary"
         onClick={() => setOpenAddClassModal(true)}
         sx={{ mb: 2 }}
       >
         Add New Class
       </Button>
 
-      <FormControl sx={{ minWidth: 120, mb: 2 }}>
+      <FormControl sx={{ mb: 2, minWidth: 140 }}>
         <InputLabel>Class Type</InputLabel>
         <Select
           value={filterClassType}
@@ -311,22 +330,23 @@ const AdminDashboard = () => {
         </Select>
       </FormControl>
 
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ mb: 4 }}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Class Name</TableCell>
               <TableCell>Teacher</TableCell>
               <TableCell>Elder</TableCell>
-              <TableCell>Total Members</TableCell>
-              <TableCell>Total Lessons</TableCell>
-              <TableCell>Attendance Rate (%)</TableCell>
+              <TableCell># Members</TableCell>
+              <TableCell># Lessons</TableCell>
+              <TableCell>Attendance %</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredClasses.map((cls) => {
-              const { totalMembers, totalLessons, attendanceRate } = calculateClassAttendanceSummary(cls);
+            {filtered.map((cls) => {
+              const { totalMembers, totalLessons, attendanceRate } =
+                calculateClassAttendanceSummary(cls);
               return (
                 <TableRow
                   key={cls.id}
@@ -342,28 +362,44 @@ const AdminDashboard = () => {
                   <TableCell>{attendanceRate}%</TableCell>
                   <TableCell>
                     <Button
-                      variant="outlined"
-                      onClick={(e) => { e.stopPropagation(); setSelectedClassId(cls.id); setOpenAddMemberModal(true); }}
-                      sx={{ mr: 1 }}
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAddMemberModal(cls.id);
+                      }}
                     >
                       Add Member
                     </Button>
                     <Button
-                      variant="outlined"
-                      color="secondary" 
-                      onClick={(e) => { e.stopPropagation(); handleOpenEditClassModal(cls); }}
+                      size="small"
                       startIcon={<EditIcon />}
-                      sx={{ mr: 1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEditClassModal(cls);
+                      }}
                     >
                       Edit
                     </Button>
                     <Button
-                      variant="outlined"
+                      size="small"
                       color="error"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls.id, cls.name); }}
                       startIcon={<DeleteIcon />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClass(cls.id, cls.name);
+                      }}
                     >
                       Delete
+                    </Button>
+                    <Button
+                      size="small"
+                      color="secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/members/${cls.id}`);
+                      }}
+                    >
+                      Manage Members
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -373,7 +409,7 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* Confirm Delete Dialog */}
+      {/* ────── Confirm Delete ────── */}
       <Dialog open={confirmDialog.open} onClose={closeConfirmDialog}>
         <DialogTitle>{confirmDialog.title}</DialogTitle>
         <DialogContent>
@@ -381,13 +417,241 @@ const AdminDashboard = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeConfirmDialog}>Cancel</Button>
-          <Button onClick={confirmDialog.onConfirm} color="error">Delete</Button>
+          <Button
+            color="error"
+            onClick={() => {
+              confirmDialog.onConfirm();
+            }}
+          >
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Modals and Reporting omitted... (unchanged) */}
+      {/* ────── Snackbars ────── */}
+      <Snackbar
+        open={snackbarOpen}
+        message={snackbarMessage}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+      />
+
+      {/* ────── Add Class Modal ────── */}
+      <Modal open={openAddClassModal} onClose={() => setOpenAddClassModal(false)}>
+        <Box sx={{ ...modalStyle, width: 360 }}>
+          <Typography variant="h6">Add New Class</Typography>
+          <TextField
+            label="Class Name"
+            value={newClassName}
+            onChange={(e) => setNewClassName(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Teacher"
+            value={newClassTeacher}
+            onChange={(e) => setNewClassTeacher(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Elder (opt.)"
+            value={newClassElder}
+            onChange={(e) => setNewClassElder(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          {classModalError && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {classModalError}
+            </Typography>
+          )}
+          <Button
+            variant="contained"
+            fullWidth
+            sx={{ mt: 2 }}
+            onClick={handleCreateClass}
+          >
+            Create
+          </Button>
+        </Box>
+      </Modal>
+
+      {/* ────── Edit Class Modal ────── */}
+      <Modal open={openEditClassModal} onClose={() => setOpenEditClassModal(false)}>
+        <Box sx={{ ...modalStyle, width: 360 }}>
+          <Typography variant="h6">Edit Class</Typography>
+          <TextField
+            label="Class Name"
+            value={editClassName}
+            onChange={(e) => setEditClassName(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Teacher"
+            value={editClassTeacher}
+            onChange={(e) => setEditClassTeacher(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Elder (opt.)"
+            value={editClassElder}
+            onChange={(e) => setEditClassElder(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <Button
+            variant="contained"
+            fullWidth
+            sx={{ mt: 2 }}
+            onClick={handleUpdateClass}
+          >
+            Update
+          </Button>
+        </Box>
+      </Modal>
+
+      {/* ────── Add Member Modal ────── */}
+      <Modal open={openAddMemberModal} onClose={() => setOpenAddMemberModal(false)}>
+        <Box sx={{ ...modalStyle, width: 360 }}>
+          <Typography variant="h6">Add Member</Typography>
+          <TextField
+            label="Full Name"
+            value={newMemberFullName}
+            onChange={(e) => setNewMemberFullName(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Residence"
+            value={newMemberResidence}
+            onChange={(e) => setNewMemberResidence(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Prayer Cell"
+            value={newMemberPrayerCell}
+            onChange={(e) => setNewMemberPrayerCell(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Phone"
+            value={newMemberPhone}
+            onChange={(e) => setNewMemberPhone(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Email"
+            value={newMemberEmail}
+            onChange={(e) => setNewMemberEmail(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Membership</InputLabel>
+            <Select
+              value={newMemberMembership}
+              onChange={(e) => setNewMemberMembership(e.target.value)}
+            >
+              <MenuItem value="Member">Member</MenuItem>
+              <MenuItem value="Visitor">Visitor</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl component="fieldset" sx={{ mt: 2 }}>
+            <RadioGroup
+              row
+              value={newMemberBaptized}
+              onChange={(e) => setNewMemberBaptized(e.target.value)}
+            >
+              <FormControlLabel value="Baptized" control={<Radio />} label="Baptized" />
+              <FormControlLabel
+                value="Not Baptized"
+                control={<Radio />}
+                label="Not Baptized"
+              />
+            </RadioGroup>
+          </FormControl>
+          {memberModalError && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {memberModalError}
+            </Typography>
+          )}
+          <Button
+            variant="contained"
+            fullWidth
+            sx={{ mt: 2 }}
+            onClick={handleAddMember}
+          >
+            Add Member
+          </Button>
+        </Box>
+      </Modal>
+
+      {/* ────── Attendance Reports ────── */}
+      <Box sx={{ borderTop: '1px solid #ccc', pt: 3, mt: 4 }}>
+        <Typography variant="h5" gutterBottom>
+          Attendance Reports
+        </Typography>
+        <FormControl sx={{ mr: 2, width: 140 }}>
+          <InputLabel>Mode</InputLabel>
+          <Select
+            value={reportMode}
+            onChange={(e) => setReportMode(e.target.value)}
+          >
+            <MenuItem value="month">Monthly</MenuItem>
+            <MenuItem value="year">Yearly</MenuItem>
+          </Select>
+        </FormControl>
+        <TextField
+          label="Year"
+          type="number"
+          value={reportYear}
+          onChange={(e) => setReportYear(+e.target.value)}
+          sx={{ mr: 2, width: 100 }}
+        />
+        {reportMode === 'month' && (
+          <TextField
+            label="Month"
+            type="number"
+            value={reportMonth}
+            onChange={(e) => setReportMonth(+e.target.value)}
+            sx={{ mr: 2, width: 100 }}
+            inputProps={{ min: 1, max: 12 }}
+          />
+        )}
+        <Button variant="contained" onClick={fetchAttendanceRecords}>
+          Fetch
+        </Button>
+        {attendanceRecords.length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Typography>
+              Found {attendanceRecords.length} record
+              {attendanceRecords.length > 1 ? 's' : ''}.
+            </Typography>
+            <Button variant="outlined" sx={{ mt: 1 }} onClick={handleDownloadCSV}>
+              Download CSV
+            </Button>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 };
 
 export default AdminDashboard;
+
+// shared modal styling
+const modalStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+};
