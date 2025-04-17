@@ -1,11 +1,10 @@
 // src/components/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
-import RadioGroup from '@mui/material/RadioGroup';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Radio from '@mui/material/Radio';
 import {
-  Typography,
   Box,
+  Typography,
+  Button,
+  Grid,
   Table,
   TableBody,
   TableCell,
@@ -17,7 +16,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Button,
   Modal,
   TextField,
   Snackbar,
@@ -26,9 +24,18 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
+import {
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Group as GroupIcon,
+  GetApp as GetAppIcon,
+  PersonAdd as PersonAddIcon,
+  Add as AddIcon,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import {
   onSnapshot,
@@ -46,108 +53,89 @@ import {
   addMemberToClass,
 } from '../firebaseHelpers';
 
-// ------------------------------
-// Helpers
-// ------------------------------
-const calculateClassAttendanceSummary = (classData) => {
-  const members = classData.members || [];
-  const totalMembers = members.length;
-  const totalLessons = members[0]?.attendance?.length || 0;
-  const totalAttendances = members.reduce(
-    (sum, m) => sum + (m.attendance?.filter((x) => x).length || 0),
+// ——— Helpers ———
+const calculateSummary = (cls) => {
+  const members = cls.members || [];
+  const mCount = members.length;
+  const lessons = members[0]?.attendance?.length || 0;
+  const attended = members.reduce(
+    (sum, m) => sum + (m.attendance?.filter(Boolean).length || 0),
     0
   );
-  const possible = totalMembers * totalLessons;
+  const possible = mCount * lessons;
   return {
-    totalMembers,
-    totalLessons,
-    attendanceRate:
-      possible > 0 ? ((totalAttendances / possible) * 100).toFixed(2) : 'N/A',
+    totalMembers: mCount,
+    totalLessons: lessons,
+    attendanceRate: possible ? ((attended / possible) * 100).toFixed(2) : 'N/A',
   };
 };
 
-const convertJSONToCSV = (jsonData) => {
-  if (!jsonData.length) return '';
-  const headers = Object.keys(jsonData[0]);
+const toCSV = (data) => {
+  if (!data.length) return '';
+  const headers = Object.keys(data[0]);
   const rows = [
     headers.join(','),
-    ...jsonData.map((row) =>
+    ...data.map((row) =>
       headers.map((h) => `"${row[h] || ''}"`).join(',')
     ),
   ];
   return rows.join('\n');
 };
 
-const downloadCSV = (csvContent, fileName) => {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+const downloadCSV = (csv, filename) => {
+  const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = fileName;
+  a.download = filename;
   a.click();
 };
 
-// ------------------------------
-// Main Component
-// ------------------------------
+// ——— Main Component ———
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
-  // -- State: Classes & UI --
-  const [classesData, setClassesData] = useState([]);
-  const [filterClassType, setFilterClassType] = useState('All');
+  // — State
+  const [classes, setClasses] = useState([]);
+  const [filterType, setFilterType] = useState('All');
   const [loading, setLoading] = useState(true);
 
-  // -- State: Snack & Confirm Dialog --
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    onConfirm: null,
+  // Snack & Confirm
+  const [snack, setSnack] = useState({ open: false, msg: '' });
+  const [confirm, setConfirm] = useState({ open: false, onOk: null, title: '', text: '' });
+
+  // Add/Edit Class
+  const [addClsOpen, setAddClsOpen] = useState(false);
+  const [editClsOpen, setEditClsOpen] = useState(false);
+  const [clsForm, setClsForm] = useState({ id: '', name: '', teacher: '', elder: '' });
+  const [clsError, setClsError] = useState('');
+
+  // Add Member
+  const [addMemOpen, setAddMemOpen] = useState(false);
+  const [memForm, setMemForm] = useState({
+    classId: '',
+    fullName: '',
+    residence: '',
+    prayerCell: '',
+    phone: '',
+    email: '',
+    membership: 'Member',
+    baptized: 'Not Baptized',
   });
+  const [memError, setMemError] = useState('');
 
-  // -- State: Add/Edit Class Modals --
-  const [openAddClassModal, setOpenAddClassModal] = useState(false);
-  const [newClassName, setNewClassName] = useState('');
-  const [newClassTeacher, setNewClassTeacher] = useState('');
-  const [newClassElder, setNewClassElder] = useState('');
-  const [classModalError, setClassModalError] = useState('');
-
-  const [openEditClassModal, setOpenEditClassModal] = useState(false);
-  const [editClassId, setEditClassId] = useState('');
-  const [editClassName, setEditClassName] = useState('');
-  const [editClassTeacher, setEditClassTeacher] = useState('');
-  const [editClassElder, setEditClassElder] = useState('');
-
-  // -- State: Add Member Modal --
-  const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [newMemberFullName, setNewMemberFullName] = useState('');
-  const [newMemberResidence, setNewMemberResidence] = useState('');
-  const [newMemberPrayerCell, setNewMemberPrayerCell] = useState('');
-  const [newMemberPhone, setNewMemberPhone] = useState('');
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberMembership, setNewMemberMembership] = useState('Member');
-  const [newMemberBaptized, setNewMemberBaptized] = useState('Not Baptized');
-  const [memberModalError, setMemberModalError] = useState('');
-
-  // -- State: Reporting --
+  // Reporting
   const [reportMode, setReportMode] = useState('month');
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
-  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [records, setRecords] = useState([]);
 
-  // ------------------------------
-  // Effects
-  // ------------------------------
+  // — Fetch classes real-time
   useEffect(() => {
-    // Real‑time classes
     const unsub = onSnapshot(
       collection(db, 'classes'),
       (snap) => {
-        setClassesData(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setClasses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
       (err) => {
@@ -158,214 +146,169 @@ const AdminDashboard = () => {
     return () => unsub();
   }, []);
 
-  // ------------------------------
-  // UI Helpers
-  // ------------------------------
-  const showSnackbar = (msg) => {
-    setSnackbarMessage(msg);
-    setSnackbarOpen(true);
-  };
+  // — UI helpers
+  const openSnack = (msg) => setSnack({ open: true, msg });
+  const openConfirm = (title, text, onOk) => setConfirm({ open: true, title, text, onOk });
+  const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
 
-  const openConfirmDialog = (title, message, onConfirm) => {
-    setConfirmDialog({ open: true, title, message, onConfirm });
-  };
-  const closeConfirmDialog = () =>
-    setConfirmDialog((c) => ({ ...c, open: false }));
-
-  // ------------------------------
-  // Class CRUD
-  // ------------------------------
-  const handleCreateClass = async () => {
-    if (!newClassName.trim() || !newClassTeacher.trim()) {
-      setClassModalError('Please fill out required fields');
+  // — Class CRUD
+  const handleSaveClass = async () => {
+    if (!clsForm.name.trim() || !clsForm.teacher.trim()) {
+      setClsError('Name & teacher are required');
       return;
     }
     try {
-      await addNewClass({
-        name: newClassName.trim(),
-        teacher: newClassTeacher.trim(),
-        elder: newClassElder.trim(),
-        classType: 'Church Service',
-        members: [],
-      });
-      showSnackbar('Class created');
-      setOpenAddClassModal(false);
-      setNewClassName('');
-      setNewClassTeacher('');
-      setNewClassElder('');
-      setClassModalError('');
+      if (editClsOpen) {
+        await updateClass(clsForm.id, {
+          name: clsForm.name,
+          teacher: clsForm.teacher,
+          elder: clsForm.elder,
+        });
+        openSnack('Class updated');
+      } else {
+        await addNewClass({
+          name: clsForm.name,
+          teacher: clsForm.teacher,
+          elder: clsForm.elder,
+          classType: 'Church Service',
+          members: [],
+        });
+        openSnack('Class added');
+      }
+      setClsError('');
+      setAddClsOpen(false);
+      setEditClsOpen(false);
     } catch {
-      setClassModalError('Error creating class');
+      setClsError('Error saving class');
     }
   };
 
-  const handleOpenEditClassModal = (cls) => {
-    setEditClassId(cls.id);
-    setEditClassName(cls.name);
-    setEditClassTeacher(cls.teacher);
-    setEditClassElder(cls.elder);
-    setOpenEditClassModal(true);
-  };
-
-  const handleUpdateClass = async () => {
-    if (!editClassName.trim() || !editClassTeacher.trim()) {
-      alert('Please fill out required fields');
-      return;
-    }
-    try {
-      await updateClass(editClassId, {
-        name: editClassName.trim(),
-        teacher: editClassTeacher.trim(),
-        elder: editClassElder.trim(),
-      });
-      showSnackbar('Class updated');
-      setOpenEditClassModal(false);
-    } catch {
-      alert('Error updating class');
-    }
-  };
-
-  const handleDeleteClass = (id, name) => {
-    openConfirmDialog(`Delete "${name}"?`, 'This cannot be undone.', async () => {
+  const handleDeleteClass = (id, name) =>
+    openConfirm(`Delete "${name}"?`, 'This action cannot be undone.', async () => {
       await deleteClass(id);
-      showSnackbar('Class deleted');
-      closeConfirmDialog();
+      openSnack('Class deleted');
+      closeConfirm();
     });
-  };
 
-  // ------------------------------
-  // Member CRUD (Admin)
-  // ------------------------------
-  const handleOpenAddMemberModal = (classId) => {
-    setSelectedClassId(classId);
-    setOpenAddMemberModal(true);
-  };
-
-  const handleAddMember = async () => {
-    if (!newMemberFullName.trim() || !newMemberPhone.trim() || !newMemberEmail.trim()) {
-      setMemberModalError('Please fill out required fields');
+  // — Member CRUD
+  const handleSaveMember = async () => {
+    const { classId, fullName, phone, email } = memForm;
+    if (!fullName.trim() || !phone.trim() || !email.trim()) {
+      setMemError('Name, phone & email are required');
       return;
     }
     try {
-      await addMemberToClass(selectedClassId, {
-        fullName: newMemberFullName.trim(),
-        residence: newMemberResidence.trim(),
-        prayerCell: newMemberPrayerCell.trim(),
-        phone: newMemberPhone.trim(),
-        email: newMemberEmail.trim(),
-        membership: newMemberMembership,
-        baptized: newMemberBaptized,
+      await addMemberToClass(classId, {
+        fullName,
+        residence: memForm.residence,
+        prayerCell: memForm.prayerCell,
+        phone,
+        email,
+        membership: memForm.membership,
+        baptized: memForm.baptized,
         attendance: [],
       });
-      showSnackbar('Member added');
-      setOpenAddMemberModal(false);
-      setMemberModalError('');
+      openSnack('Member added');
+      setAddMemOpen(false);
+      setMemError('');
     } catch {
-      setMemberModalError('Error adding member');
+      setMemError('Error adding member');
     }
   };
 
-  // ------------------------------
-  // Reporting
-  // ------------------------------
-  const fetchAttendanceRecords = async () => {
-    const colGroup = collectionGroup(db, 'attendanceRecords');
-    let qRef;
-    if (reportMode === 'month') {
-      qRef = query(
-        colGroup,
-        where('year', '==', reportYear),
-        where('month', '==', reportMonth)
-      );
-    } else {
-      qRef = query(colGroup, where('year', '==', reportYear));
-    }
-    try {
-      const snap = await getDocs(qRef);
-      setAttendanceRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDownloadCSV = () => {
-    const csv = convertJSONToCSV(attendanceRecords);
-    const fname =
+  // — Reporting
+  const fetchRecords = async () => {
+    const col = collectionGroup(db, 'attendanceRecords');
+    const qRef =
       reportMode === 'month'
-        ? `attendance-${reportYear}-${reportMonth}.csv`
-        : `attendance-${reportYear}.csv`;
-    downloadCSV(csv, fname);
+        ? query(col, where('year', '==', reportYear), where('month', '==', reportMonth))
+        : query(col, where('year', '==', reportYear));
+    const snap = await getDocs(qRef);
+    setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  };
+  const downloadReport = () => {
+    const csv = toCSV(records);
+    const fn = reportMode === 'month'
+      ? `attendance-${reportYear}-${reportMonth}.csv`
+      : `attendance-${reportYear}.csv`;
+    downloadCSV(csv, fn);
   };
 
-  if (loading) return <Typography>Loading classes…</Typography>;
+  if (loading) return <Typography>Loading…</Typography>;
 
-  const filtered = classesData.filter(
-    (c) => filterClassType === 'All' || c.classType === filterClassType
+  // — Filtered classes
+  const filtered = classes.filter(
+    (c) => filterType === 'All' || c.classType === filterType
   );
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box p={3}>
       <Typography variant="h4" gutterBottom>
         Admin Dashboard
       </Typography>
 
-      {/* ────── Class Management ────── */}
-      <Button
-        variant="contained"
-        onClick={() => setOpenAddClassModal(true)}
-        sx={{ mb: 2 }}
-      >
-        Add New Class
-      </Button>
+      {/* — Class Toolbar — */}
+      <Grid container spacing={2} mb={2}>
+        <Grid item>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setClsForm({ id: '', name: '', teacher: '', elder: '' });
+              setAddClsOpen(true);
+            }}
+          >
+            New Class
+          </Button>
+        </Grid>
+        <Grid item>
+          <FormControl sx={{ minWidth: 140 }}>
+            <InputLabel>Class Type</InputLabel>
+            <Select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              label="Class Type"
+            >
+              <MenuItem value="All">All</MenuItem>
+              <MenuItem value="Church Service">Church Service</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+      </Grid>
 
-      <FormControl sx={{ mb: 2, minWidth: 140 }}>
-        <InputLabel>Class Type</InputLabel>
-        <Select
-          value={filterClassType}
-          label="Class Type"
-          onChange={(e) => setFilterClassType(e.target.value)}
-        >
-          <MenuItem value="All">All</MenuItem>
-          <MenuItem value="Church Service">Church Service</MenuItem>
-        </Select>
-      </FormControl>
-
-      <TableContainer component={Paper} sx={{ mb: 4 }}>
+      {/* — Classes Table — */}
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Class Name</TableCell>
+              <TableCell>Class</TableCell>
               <TableCell>Teacher</TableCell>
               <TableCell>Elder</TableCell>
               <TableCell># Members</TableCell>
               <TableCell># Lessons</TableCell>
               <TableCell>Attendance %</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filtered.map((cls) => {
+            {filtered.map((c) => {
               const { totalMembers, totalLessons, attendanceRate } =
-                calculateClassAttendanceSummary(cls);
+                calculateSummary(c);
               return (
-                <TableRow
-                  key={cls.id}
-                  hover
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/attendance/${cls.id}`)}
-                >
-                  <TableCell>{cls.name}</TableCell>
-                  <TableCell>{cls.teacher}</TableCell>
-                  <TableCell>{cls.elder}</TableCell>
+                <TableRow key={c.id} hover>
+                  <TableCell>{c.name}</TableCell>
+                  <TableCell>{c.teacher}</TableCell>
+                  <TableCell>{c.elder}</TableCell>
                   <TableCell>{totalMembers}</TableCell>
                   <TableCell>{totalLessons}</TableCell>
                   <TableCell>{attendanceRate}%</TableCell>
-                  <TableCell>
+                  <TableCell align="right">
                     <Button
                       size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenAddMemberModal(cls.id);
+                      startIcon={<PersonAddIcon />}
+                      onClick={() => {
+                        setMemForm({ ...memForm, classId: c.id });
+                        setAddMemOpen(true);
                       }}
                     >
                       Add Member
@@ -373,9 +316,14 @@ const AdminDashboard = () => {
                     <Button
                       size="small"
                       startIcon={<EditIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenEditClassModal(cls);
+                      onClick={() => {
+                        setClsForm({
+                          id: c.id,
+                          name: c.name,
+                          teacher: c.teacher,
+                          elder: c.elder,
+                        });
+                        setEditClsOpen(true);
                       }}
                     >
                       Edit
@@ -384,20 +332,15 @@ const AdminDashboard = () => {
                       size="small"
                       color="error"
                       startIcon={<DeleteIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteClass(cls.id, cls.name);
-                      }}
+                      onClick={() => handleDeleteClass(c.id, c.name)}
                     >
                       Delete
                     </Button>
                     <Button
                       size="small"
                       color="secondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/admin/members/${cls.id}`);
-                      }}
+                      startIcon={<GroupIcon />}
+                      onClick={() => navigate(`/admin/members/${c.id}`)}
                     >
                       Manage Members
                     </Button>
@@ -409,166 +352,144 @@ const AdminDashboard = () => {
         </Table>
       </TableContainer>
 
-      {/* ────── Confirm Delete ────── */}
-      <Dialog open={confirmDialog.open} onClose={closeConfirmDialog}>
-        <DialogTitle>{confirmDialog.title}</DialogTitle>
+      {/* — Confirm Dialog — */}
+      <Dialog open={confirm.open} onClose={closeConfirm}>
+        <DialogTitle>{confirm.title}</DialogTitle>
         <DialogContent>
-          <DialogContentText>{confirmDialog.message}</DialogContentText>
+          <DialogContentText>{confirm.text}</DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeConfirmDialog}>Cancel</Button>
-          <Button
-            color="error"
-            onClick={() => {
-              confirmDialog.onConfirm();
-            }}
-          >
+          <Button onClick={closeConfirm}>Cancel</Button>
+          <Button color="error" onClick={confirm.onOk}>
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ────── Snackbars ────── */}
+      {/* — Snack — */}
       <Snackbar
-        open={snackbarOpen}
-        message={snackbarMessage}
+        open={snack.open}
+        message={snack.msg}
         autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
       />
 
-      {/* ────── Add Class Modal ────── */}
-      <Modal open={openAddClassModal} onClose={() => setOpenAddClassModal(false)}>
-        <Box sx={{ ...modalStyle, width: 360 }}>
-          <Typography variant="h6">Add New Class</Typography>
+      {/* — Add/Edit Class Modal — */}
+      <Modal open={addClsOpen || editClsOpen} onClose={() => { setAddClsOpen(false); setEditClsOpen(false); }}>
+        <Box sx={modalStyle}>
+          <Typography variant="h6" gutterBottom>
+            {editClsOpen ? 'Edit Class' : 'New Class'}
+          </Typography>
           <TextField
-            label="Class Name"
-            value={newClassName}
-            onChange={(e) => setNewClassName(e.target.value)}
             fullWidth
-            sx={{ mt: 2 }}
+            label="Name"
+            value={clsForm.name}
+            onChange={(e) => setClsForm((f) => ({ ...f, name: e.target.value }))}
+            sx={{ mb: 2 }}
           />
           <TextField
+            fullWidth
             label="Teacher"
-            value={newClassTeacher}
-            onChange={(e) => setNewClassTeacher(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
+            value={clsForm.teacher}
+            onChange={(e) => setClsForm((f) => ({ ...f, teacher: e.target.value }))}
+            sx={{ mb: 2 }}
           />
           <TextField
-            label="Elder (opt.)"
-            value={newClassElder}
-            onChange={(e) => setNewClassElder(e.target.value)}
             fullWidth
-            sx={{ mt: 2 }}
+            label="Elder (opt.)"
+            value={clsForm.elder}
+            onChange={(e) => setClsForm((f) => ({ ...f, elder: e.target.value }))}
+            sx={{ mb: 2 }}
           />
-          {classModalError && (
-            <Typography color="error" sx={{ mt: 1 }}>
-              {classModalError}
-            </Typography>
-          )}
+          {clsError && <Typography color="error">{clsError}</Typography>}
           <Button
             variant="contained"
             fullWidth
+            onClick={handleSaveClass}
             sx={{ mt: 2 }}
-            onClick={handleCreateClass}
           >
-            Create
+            {editClsOpen ? 'Update' : 'Create'}
           </Button>
         </Box>
       </Modal>
 
-      {/* ────── Edit Class Modal ────── */}
-      <Modal open={openEditClassModal} onClose={() => setOpenEditClassModal(false)}>
-        <Box sx={{ ...modalStyle, width: 360 }}>
-          <Typography variant="h6">Edit Class</Typography>
+      {/* — Add Member Modal — */}
+      <Modal open={addMemOpen} onClose={() => setAddMemOpen(false)}>
+        <Box sx={modalStyle}>
+          <Typography variant="h6" gutterBottom>
+            Add Member
+          </Typography>
           <TextField
-            label="Class Name"
-            value={editClassName}
-            onChange={(e) => setEditClassName(e.target.value)}
             fullWidth
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Teacher"
-            value={editClassTeacher}
-            onChange={(e) => setEditClassTeacher(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Elder (opt.)"
-            value={editClassElder}
-            onChange={(e) => setEditClassElder(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
-          />
-          <Button
-            variant="contained"
-            fullWidth
-            sx={{ mt: 2 }}
-            onClick={handleUpdateClass}
-          >
-            Update
-          </Button>
-        </Box>
-      </Modal>
-
-      {/* ────── Add Member Modal ────── */}
-      <Modal open={openAddMemberModal} onClose={() => setOpenAddMemberModal(false)}>
-        <Box sx={{ ...modalStyle, width: 360 }}>
-          <Typography variant="h6">Add Member</Typography>
-          <TextField
             label="Full Name"
-            value={newMemberFullName}
-            onChange={(e) => setNewMemberFullName(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
+            value={memForm.fullName}
+            onChange={(e) =>
+              setMemForm((f) => ({ ...f, fullName: e.target.value }))
+            }
+            sx={{ mb: 2 }}
           />
           <TextField
+            fullWidth
             label="Residence"
-            value={newMemberResidence}
-            onChange={(e) => setNewMemberResidence(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
+            value={memForm.residence}
+            onChange={(e) =>
+              setMemForm((f) => ({ ...f, residence: e.target.value }))
+            }
+            sx={{ mb: 2 }}
           />
           <TextField
+            fullWidth
             label="Prayer Cell"
-            value={newMemberPrayerCell}
-            onChange={(e) => setNewMemberPrayerCell(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
+            value={memForm.prayerCell}
+            onChange={(e) =>
+              setMemForm((f) => ({ ...f, prayerCell: e.target.value }))
+            }
+            sx={{ mb: 2 }}
           />
           <TextField
+            fullWidth
             label="Phone"
-            value={newMemberPhone}
-            onChange={(e) => setNewMemberPhone(e.target.value)}
-            fullWidth
-            sx={{ mt: 2 }}
+            value={memForm.phone}
+            onChange={(e) =>
+              setMemForm((f) => ({ ...f, phone: e.target.value }))
+            }
+            sx={{ mb: 2 }}
           />
           <TextField
-            label="Email"
-            value={newMemberEmail}
-            onChange={(e) => setNewMemberEmail(e.target.value)}
             fullWidth
-            sx={{ mt: 2 }}
+            label="Email"
+            value={memForm.email}
+            onChange={(e) =>
+              setMemForm((f) => ({ ...f, email: e.target.value }))
+            }
+            sx={{ mb: 2 }}
           />
-          <FormControl fullWidth sx={{ mt: 2 }}>
+          <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel>Membership</InputLabel>
             <Select
-              value={newMemberMembership}
-              onChange={(e) => setNewMemberMembership(e.target.value)}
+              value={memForm.membership}
+              onChange={(e) =>
+                setMemForm((f) => ({ ...f, membership: e.target.value }))
+              }
+              label="Membership"
             >
               <MenuItem value="Member">Member</MenuItem>
               <MenuItem value="Visitor">Visitor</MenuItem>
             </Select>
           </FormControl>
-          <FormControl component="fieldset" sx={{ mt: 2 }}>
+          <FormControl sx={{ mb: 2 }}>
             <RadioGroup
               row
-              value={newMemberBaptized}
-              onChange={(e) => setNewMemberBaptized(e.target.value)}
+              value={memForm.baptized}
+              onChange={(e) =>
+                setMemForm((f) => ({ ...f, baptized: e.target.value }))
+              }
             >
-              <FormControlLabel value="Baptized" control={<Radio />} label="Baptized" />
+              <FormControlLabel
+                value="Baptized"
+                control={<Radio />}
+                label="Baptized"
+              />
               <FormControlLabel
                 value="Not Baptized"
                 control={<Radio />}
@@ -576,64 +497,78 @@ const AdminDashboard = () => {
               />
             </RadioGroup>
           </FormControl>
-          {memberModalError && (
-            <Typography color="error" sx={{ mt: 1 }}>
-              {memberModalError}
-            </Typography>
-          )}
+          {memError && <Typography color="error">{memError}</Typography>}
           <Button
             variant="contained"
             fullWidth
-            sx={{ mt: 2 }}
-            onClick={handleAddMember}
+            onClick={handleSaveMember}
           >
             Add Member
           </Button>
         </Box>
       </Modal>
 
-      {/* ────── Attendance Reports ────── */}
-      <Box sx={{ borderTop: '1px solid #ccc', pt: 3, mt: 4 }}>
+      {/* — Reporting — */}
+      <Box mt={4} pt={3} borderTop="1px solid #ccc">
         <Typography variant="h5" gutterBottom>
           Attendance Reports
         </Typography>
-        <FormControl sx={{ mr: 2, width: 140 }}>
-          <InputLabel>Mode</InputLabel>
-          <Select
-            value={reportMode}
-            onChange={(e) => setReportMode(e.target.value)}
-          >
-            <MenuItem value="month">Monthly</MenuItem>
-            <MenuItem value="year">Yearly</MenuItem>
-          </Select>
-        </FormControl>
-        <TextField
-          label="Year"
-          type="number"
-          value={reportYear}
-          onChange={(e) => setReportYear(+e.target.value)}
-          sx={{ mr: 2, width: 100 }}
-        />
-        {reportMode === 'month' && (
-          <TextField
-            label="Month"
-            type="number"
-            value={reportMonth}
-            onChange={(e) => setReportMonth(+e.target.value)}
-            sx={{ mr: 2, width: 100 }}
-            inputProps={{ min: 1, max: 12 }}
-          />
-        )}
-        <Button variant="contained" onClick={fetchAttendanceRecords}>
-          Fetch
-        </Button>
-        {attendanceRecords.length > 0 && (
-          <Box sx={{ mt: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item>
+            <FormControl sx={{ minWidth: 120 }}>
+              <InputLabel>Mode</InputLabel>
+              <Select
+                value={reportMode}
+                onChange={(e) => setReportMode(e.target.value)}
+                label="Mode"
+              >
+                <MenuItem value="month">Monthly</MenuItem>
+                <MenuItem value="year">Yearly</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item>
+            <TextField
+              label="Year"
+              type="number"
+              value={reportYear}
+              onChange={(e) => setReportYear(+e.target.value)}
+              sx={{ width: 100 }}
+            />
+          </Grid>
+          {reportMode === 'month' && (
+            <Grid item>
+              <TextField
+                label="Month"
+                type="number"
+                value={reportMonth}
+                onChange={(e) => setReportMonth(+e.target.value)}
+                sx={{ width: 100 }}
+                inputProps={{ min: 1, max: 12 }}
+              />
+            </Grid>
+          )}
+          <Grid item>
+            <Button
+              variant="contained"
+              startIcon={<GetAppIcon />}
+              onClick={fetchRecords}
+            >
+              Fetch
+            </Button>
+          </Grid>
+        </Grid>
+        {records.length > 0 && (
+          <Box mt={2}>
             <Typography>
-              Found {attendanceRecords.length} record
-              {attendanceRecords.length > 1 ? 's' : ''}.
+              Found {records.length} record{records.length > 1 && 's'}.
             </Typography>
-            <Button variant="outlined" sx={{ mt: 1 }} onClick={handleDownloadCSV}>
+            <Button
+              variant="outlined"
+              startIcon={<GetAppIcon />}
+              onClick={downloadReport}
+              sx={{ mt: 1 }}
+            >
               Download CSV
             </Button>
           </Box>
