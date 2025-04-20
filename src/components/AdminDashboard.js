@@ -44,8 +44,6 @@ import {
   where,
   getDocs,
   collectionGroup,
-  doc,
-  updateDoc,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -155,10 +153,6 @@ const AdminDashboard = () => {
   // Embedded member attendance aggregation states.
   const [selectedClassDetail, setSelectedClassDetail] = useState(null);
   const [aggregatedData, setAggregatedData] = useState(null);
-
-  // New state: For sending reminder notifications
-  const [selectedClassForReminder, setSelectedClassForReminder] = useState('');
-  const [notificationMessage, setNotificationMessage] = useState('');
 
   // — Fetch classes in real time.
   useEffect(() => {
@@ -398,34 +392,6 @@ const AdminDashboard = () => {
     );
   };
 
-  // New: Handle sending reminder notification to members based on phone numbers captured.
-  const handleSendReminder = async () => {
-    if (!selectedClassForReminder || !notificationMessage.trim()) {
-      openSnack("Please select a class and enter a reminder message.");
-      return;
-    }
-    // Find the selected class
-    const cls = classes.find(c => c.id === selectedClassForReminder);
-    if (!cls || !cls.members) {
-      openSnack("No members available for the selected class.");
-      return;
-    }
-    // Gather phone numbers of members (filtering out empty values)
-    const phoneNumbers = cls.members
-      .map(m => m.phone)
-      .filter(Boolean);
-    if (phoneNumbers.length === 0) {
-      openSnack("No phone numbers captured for this class.");
-      return;
-    }
-    // For now, we simulate sending by logging the details.
-    console.log("Sending reminder message:", notificationMessage);
-    console.log("To numbers:", phoneNumbers);
-    openSnack("Reminder sent successfully!");
-    setNotificationMessage("");
-    setSelectedClassForReminder("");
-  };
-
   if (loading) return <Typography>Loading…</Typography>;
 
   // — Filter classes by type.
@@ -569,13 +535,10 @@ const AdminDashboard = () => {
             <Typography variant="h5">
               {`Member Attendance Aggregation for ${selectedClassDetail.name}`}
             </Typography>
-            <Button
-              variant="contained"
-              onClick={() => {
-                setSelectedClassDetail(null);
-                setAggregatedData(null);
-              }}
-            >
+            <Button variant="contained" onClick={() => {
+              setSelectedClassDetail(null);
+              setAggregatedData(null);
+            }}>
               Hide Aggregation
             </Button>
           </Grid>
@@ -586,115 +549,6 @@ const AdminDashboard = () => {
           )}
         </Box>
       )}
-
-      {/* Reporting Section */}
-      <Box mt={4} pt={3} borderTop="1px solid #ccc">
-        <Typography variant="h5" gutterBottom>
-          Attendance Reports
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item>
-            <FormControl sx={{ minWidth: 120 }}>
-              <InputLabel>Mode</InputLabel>
-              <Select
-                value={reportMode}
-                onChange={(e) => setReportMode(e.target.value)}
-                label="Mode"
-              >
-                <MenuItem value="month">Monthly</MenuItem>
-                <MenuItem value="year">Yearly</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item>
-            <TextField
-              label="Year"
-              type="number"
-              value={reportYear}
-              onChange={(e) => setReportYear(+e.target.value)}
-              sx={{ width: 100 }}
-            />
-          </Grid>
-          {reportMode === 'month' && (
-            <Grid item>
-              <TextField
-                label="Month"
-                type="number"
-                value={reportMonth}
-                onChange={(e) => setReportMonth(+e.target.value)}
-                sx={{ width: 100 }}
-                inputProps={{ min: 1, max: 12 }}
-              />
-            </Grid>
-          )}
-          <Grid item>
-            <Button variant="contained" startIcon={<GetAppIcon />} onClick={fetchRecords}>
-              Fetch Report
-            </Button>
-          </Grid>
-        </Grid>
-        {records.length > 0 && (
-          <Box sx={{ my: 2 }}>
-            <Typography variant="subtitle1">
-              {`Found ${records.length} record${records.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
-            </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<GetAppIcon />}
-              onClick={downloadReport}
-              sx={{ mt: 2, mr: 2 }}
-            >
-              Download CSV
-            </Button>
-            {/* Toggle performance chart */}
-            <Button
-              variant="contained"
-              onClick={() => setShowChart(!showChart)}
-              sx={{ mt: 2 }}
-            >
-              {showChart ? 'Hide Performance Chart' : 'Show Performance Chart'}
-            </Button>
-            {showChart && (
-              <Box sx={{ mt: 3 }}>
-                <AttendanceChart data={chartData} />
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
-
-      {/* --- Send Reminder Notification Section --- */}
-      <Box mt={4} pt={3} borderTop="1px solid #ccc">
-        <Typography variant="h5" gutterBottom>
-          Send Reminder Notification
-        </Typography>
-        <FormControl sx={{ minWidth: 200, mb: 2 }}>
-          <InputLabel>Select Class</InputLabel>
-          <Select
-            value={selectedClassForReminder}
-            onChange={(e) => setSelectedClassForReminder(e.target.value)}
-            label="Select Class"
-          >
-            {classes.map((aClass) => (
-              <MenuItem key={aClass.id} value={aClass.id}>
-                {aClass.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <TextField
-          label="Reminder Message"
-          value={notificationMessage}
-          onChange={(e) => setNotificationMessage(e.target.value)}
-          fullWidth
-          multiline
-          rows={3}
-          sx={{ mb: 2 }}
-        />
-        <Button variant="contained" onClick={handleSendReminder}>
-          Send Message
-        </Button>
-      </Box>
 
       {/* Confirm Dialog for Class Deletion */}
       <Dialog open={confirm.open} onClose={closeConfirm}>
@@ -853,6 +707,82 @@ const AdminDashboard = () => {
           </Button>
         </Box>
       </Modal>
+
+      {/* Reporting Section */}
+      <Box mt={4} pt={3} borderTop="1px solid #ccc">
+        <Typography variant="h5" gutterBottom>
+          Attendance Reports
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item>
+            <FormControl sx={{ minWidth: 120 }}>
+              <InputLabel>Mode</InputLabel>
+              <Select
+                value={reportMode}
+                onChange={(e) => setReportMode(e.target.value)}
+                label="Mode"
+              >
+                <MenuItem value="month">Monthly</MenuItem>
+                <MenuItem value="year">Yearly</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item>
+            <TextField
+              label="Year"
+              type="number"
+              value={reportYear}
+              onChange={(e) => setReportYear(+e.target.value)}
+              sx={{ width: 100 }}
+            />
+          </Grid>
+          {reportMode === 'month' && (
+            <Grid item>
+              <TextField
+                label="Month"
+                type="number"
+                value={reportMonth}
+                onChange={(e) => setReportMonth(+e.target.value)}
+                sx={{ width: 100 }}
+                inputProps={{ min: 1, max: 12 }}
+              />
+            </Grid>
+          )}
+          <Grid item>
+            <Button variant="contained" startIcon={<GetAppIcon />} onClick={fetchRecords}>
+              Fetch Report
+            </Button>
+          </Grid>
+        </Grid>
+        {records.length > 0 && (
+          <Box sx={{ my: 2 }}>
+            <Typography variant="subtitle1">
+              {`Found ${records.length} record${records.length > 1 ? 's' : ''} for the selected ${reportMode === 'month' ? 'month' : 'year'}.`}
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<GetAppIcon />}
+              onClick={downloadReport}
+              sx={{ mt: 2, mr: 2 }}
+            >
+              Download CSV
+            </Button>
+            {/* Toggle performance chart */}
+            <Button
+              variant="contained"
+              onClick={() => setShowChart(!showChart)}
+              sx={{ mt: 2 }}
+            >
+              {showChart ? 'Hide Performance Chart' : 'Show Performance Chart'}
+            </Button>
+            {showChart && (
+              <Box sx={{ mt: 3 }}>
+                <AttendanceChart data={chartData} />
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 };
